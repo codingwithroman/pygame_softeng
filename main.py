@@ -55,7 +55,8 @@ class Game:
     def get_table_cap(self):
         active_players = self.get_active_players()
         if not active_players: return 0
-        return min(p.points for p in active_players)
+        raw_cap = min(p.points for p in active_players)
+        return min(raw_cap, MAX_BET)
 
     def start_initiative(self):
         self.initiative_rolls = {}
@@ -372,8 +373,7 @@ class Game:
             for btn in self.buttons:
                 if btn['rect'].collidepoint(pos):
                     if btn['id'] == "bet_plus":
-                        if self.current_bet + 50 <= table_cap:
-                            self.current_bet += 50
+                        self.current_bet = min(self.current_bet + 50, table_cap, MAX_BET)
                     elif btn['id'] == "bet_minus":
                         if self.current_bet - 50 >= 50:
                             self.current_bet -= 50
