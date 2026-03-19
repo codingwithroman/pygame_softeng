@@ -14,6 +14,7 @@ class Player:
         self.dice = []
         self.is_bust = False
         self.is_starter = False
+        self.has_used_powerup = False
 
     def add_points(self, amount):
         if amount % CURRENCY_STEP != 0:

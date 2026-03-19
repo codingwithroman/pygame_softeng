@@ -25,6 +25,8 @@ class Game:
         self.pot = 0
         self.current_bet = 50
         self.starter = None
+        self.turn_order = []
+        self.current_turn_idx = 0
         
         # State specific variables
         self.initiative_rolls = {} 
@@ -96,8 +98,105 @@ class Game:
         for p in active_players:
             p.subtract_points(self.current_bet)
             self.pot += self.current_bet
-        self.message = f"All players paid {self.current_bet}. Pot: {self.pot}. Rolling dice..."
-        self.state_timer = 90
+        self.message = f"All players paid {self.current_bet}. Pot: {self.pot}. Roll All!"
+        self.state_timer = 60
+
+    def roll_all(self):
+        active_players = self.get_active_players()
+        for p in active_players:
+            p.dice = [random.randint(1, 6), random.randint(1, 6)]
+            p.has_used_powerup = False
+        self.message = "Everyone rolled! Power-up turns starting..."
+        self.state = STATE_POWERUP_TURN
+        
+        # Set turn order: starting from starter clockwise
+        starter_idx = self.players.index(self.starter)
+        self.turn_order = []
+        for i in range(4):
+            p = self.players[(starter_idx + i) % 4]
+            if not p.is_bust:
+                self.turn_order.append(p)
+        self.current_turn_idx = 0
+        self.prepare_powerup_turn()
+
+    def prepare_powerup_turn(self):
+        if self.current_turn_idx >= len(self.turn_order):
+            self.state = STATE_SHOWDOWN
+            self.message = "All turns finished. Showdown!"
+            self.state_timer = 90
+            return
+
+        p = self.turn_order[self.current_turn_idx]
+        if p.is_ai:
+            self.message = f"{p.name}'s turn (AI)..."
+            self.state_timer = 90 # Delay to see AI turn
+        else:
+            self.message = f"Your turn! Use a power-up or Pass."
+
+    def execute_ai_powerup(self):
+        p = self.turn_order[self.current_turn_idx]
+        my_score = sum(p.dice)
+        active_opponents = [o for o in self.get_active_players() if o != p]
+        if not active_opponents: return
+
+        best_opp = max(active_opponents, key=lambda x: sum(x.dice))
+        opp_score = sum(best_opp.dice)
+
+        used = False
+        # In Round 10, use best available
+        if self.round == 10:
+            if p.has_powerup("Extra Die"):
+                self.use_powerup(p, "Extra Die")
+                used = True
+            elif p.has_powerup("Swap"):
+                self.use_powerup(p, "Swap")
+                used = True
+            elif p.has_powerup("Reroll"):
+                self.use_powerup(p, "Reroll")
+                used = True
+        # Otherwise, only if losing
+        elif my_score <= opp_score:
+            if p.has_powerup("Extra Die"):
+                self.use_powerup(p, "Extra Die")
+                used = True
+            elif p.has_powerup("Swap"):
+                # Only swap if opp's highest is better than mine
+                if max(best_opp.dice) > min(p.dice):
+                    self.use_powerup(p, "Swap")
+                    used = True
+            elif p.has_powerup("Reroll") and my_score < 7:
+                self.use_powerup(p, "Reroll")
+                used = True
+
+        if not used:
+            self.message = f"{p.name} passed."
+        
+        self.current_turn_idx += 1
+        self.prepare_powerup_turn()
+
+    def use_powerup(self, player, p_type):
+        if player.has_used_powerup: return False
+        if not player.use_powerup(p_type): return False
+        
+        player.has_used_powerup = True
+        if p_type == "Reroll":
+            player.dice = [random.randint(1, 6), random.randint(1, 6)]
+            self.message = f"{player.name} used Reroll!"
+        elif p_type == "Extra Die":
+            player.dice.append(random.randint(1, 6))
+            self.message = f"{player.name} added an Extra Die!"
+        elif p_type == "Swap":
+            # Swap lowest of player with highest of best opponent
+            opponents = [o for o in self.get_active_players() if o != player]
+            best_opp = max(opponents, key=lambda x: sum(x.dice))
+            
+            p_min_idx = player.dice.index(min(player.dice))
+            o_max_idx = best_opp.dice.index(max(best_opp.dice))
+            
+            player.dice[p_min_idx], best_opp.dice[o_max_idx] = best_opp.dice[o_max_idx], player.dice[p_min_idx]
+            self.message = f"{player.name} swapped with {best_opp.name}!"
+        
+        return True
 
     def update(self):
         if self.state_timer > 0:
@@ -112,9 +211,14 @@ class Game:
                     if self.starter.is_ai:
                         self.collect_bets()
                         self.state = STATE_ROLL_ALL
-                    # If human, we wait for button press
                 elif self.state == STATE_ROLL_ALL:
-                    # Next step functionality placeholder
+                    self.roll_all()
+                elif self.state == STATE_POWERUP_TURN:
+                    p = self.turn_order[self.current_turn_idx]
+                    if p.is_ai:
+                        self.execute_ai_powerup()
+                elif self.state == STATE_SHOWDOWN:
+                    # Next step
                     pass
 
     def handle_click(self, pos):
@@ -131,6 +235,27 @@ class Game:
                     elif btn['id'] == "bet_confirm":
                         self.collect_bets()
                         self.state = STATE_ROLL_ALL
+        
+        elif self.state == STATE_POWERUP_TURN:
+            p = self.turn_order[self.current_turn_idx]
+            if not p.is_ai:
+                for btn in self.buttons:
+                    if btn['rect'].collidepoint(pos):
+                        if btn['id'] == "pw_pass":
+                            self.current_turn_idx += 1
+                            self.prepare_powerup_turn()
+                        elif btn['id'] == "pw_reroll":
+                            if self.use_powerup(p, "Reroll"):
+                                self.current_turn_idx += 1
+                                self.state_timer = 90
+                        elif btn['id'] == "pw_extra":
+                            if self.use_powerup(p, "Extra Die"):
+                                self.current_turn_idx += 1
+                                self.state_timer = 90
+                        elif btn['id'] == "pw_swap":
+                            if self.use_powerup(p, "Swap"):
+                                self.current_turn_idx += 1
+                                self.state_timer = 90
 
     def draw_button(self, x, y, w, h, text, color, btn_id):
         rect = pygame.Rect(x, y, w, h)
@@ -164,6 +289,18 @@ class Game:
             self.draw_button(SCREEN_WIDTH//2 + 110, 130, 50, 40, "+", COLOR_BROWN, "bet_plus")
             self.draw_button(SCREEN_WIDTH//2 - 60, 180, 120, 40, "CONFIRM", (0, 100, 0), "bet_confirm")
 
+        # Draw Power-up Controls for human
+        if self.state == STATE_POWERUP_TURN:
+            p = self.turn_order[self.current_turn_idx]
+            if not p.is_ai:
+                self.draw_button(SCREEN_WIDTH//2 - 250, 140, 100, 40, "PASS", COLOR_GREY, "pw_pass")
+                if p.has_powerup("Reroll"):
+                    self.draw_button(SCREEN_WIDTH//2 - 140, 140, 100, 40, "REROLL", COLOR_BROWN, "pw_reroll")
+                if p.has_powerup("Swap"):
+                    self.draw_button(SCREEN_WIDTH//2 - 30, 140, 100, 40, "SWAP", COLOR_BROWN, "pw_swap")
+                if p.has_powerup("Extra Die"):
+                    self.draw_button(SCREEN_WIDTH//2 + 80, 140, 120, 40, "EXTRA DIE", COLOR_BROWN, "pw_extra")
+
         # Draw Players
         for i, p in enumerate(self.players):
             # ... (rest of the drawing logic remains similar)
@@ -172,17 +309,24 @@ class Game:
             layout_pos = [
                 (SCREEN_WIDTH // 2 - 125, SCREEN_HEIGHT - 200), # P1
                 (50, SCREEN_HEIGHT // 2 - 90),                  # P2
-                (SCREEN_WIDTH // 2 - 125, 230 if self.state == STATE_BETTING and not self.starter.is_ai else 120),# P3 shift down if betting
+                (SCREEN_WIDTH // 2 - 125, 230 if self.state in [STATE_BETTING, STATE_POWERUP_TURN] and not self.starter.is_ai else 120),# P3 shift down if betting
                 (SCREEN_WIDTH - 300, SCREEN_HEIGHT // 2 - 90)   # P4
             ]
             # (Keeping the layout consistent but shifting P3 if buttons are in the way)
             x, y = layout_pos[i]
             if i == 2 and self.state == STATE_BETTING and not self.starter.is_ai:
-                y = 250 # Push P3 down even more to avoid overlap with betting UI
+                y = 250
+            elif i == 2 and self.state == STATE_POWERUP_TURN and self.turn_order and not self.turn_order[self.current_turn_idx].is_ai:
+                y = 250 
 
+            # highlight current turn
+            is_turn = self.state == STATE_POWERUP_TURN and self.turn_order and self.current_turn_idx < len(self.turn_order) and self.turn_order[self.current_turn_idx] == p
+            
             # Draw box
             color = COLOR_GREY if p.is_bust else (COLOR_RED if p.is_starter else COLOR_BROWN)
             pygame.draw.rect(self.screen, color, (x, y, box_width, box_height), border_radius=10)
+            if is_turn:
+                pygame.draw.rect(self.screen, COLOR_GOLD, (x-4, y-4, box_width+8, box_height+8), width=4, border_radius=12)
             pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, box_width, box_height), width=2, border_radius=10)
 
             # Draw player info
