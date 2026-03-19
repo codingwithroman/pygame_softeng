@@ -336,6 +336,7 @@ class Game:
         if self.state_timer > 0:
             self.state_timer -= 1
             if self.state_timer == 0:
+                print(f"Transitioning from {self.state}...")
                 if self.state == STATE_INITIATIVE:
                     if self.starter:
                         self.start_betting()
@@ -583,7 +584,22 @@ def main():
         game.clock.tick(FPS)
 
     pygame.quit()
-    sys.exit()
 
 if __name__ == "__main__":
-    main()
+    try:
+        print("Starting High Roller: Power-up...")
+        main()
+    except Exception as e:
+        print("\n" + "="*40)
+        print(f"ERROR: The game has crashed.")
+        print(f"Reason: {e}")
+        print("="*40)
+        import traceback
+        traceback.print_exc()
+        print("="*40)
+        input("Press Enter to close this window...")
+    except SystemExit:
+        pass # Normal exit
+    except:
+        print("An unknown error occurred.")
+        input("Press Enter to close this window...")
