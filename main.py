@@ -64,37 +64,64 @@ class Game:
         return min(raw_cap, MAX_BET)
 
     def start_initiative(self):
+        print(f"DEBUG START: Round {self.round} initiative")
+        self.state = STATE_INITIATIVE
         self.initiative_rolls = {}
+        self.starter = None
         self.tied_players = self.get_active_players()
         self.message = "Rolling for Initiative..."
-        self.resolve_initiative()
+        self.roll_initiative() # First roll
+        self.state_timer = 150
 
-    def get_active_players(self):
-        return [p for p in self.players if not p.is_bust]
-
-    def resolve_initiative(self):
+    def roll_initiative(self):
+        # We only roll for tied_players (which is all active players initially)
         for p in self.tied_players:
             roll = random.randint(1, 6)
             self.initiative_rolls[p] = roll
             p.dice = [roll]
+        print(f"DEBUG: Initiative rolls: {[(p.name, r) for p, r in self.initiative_rolls.items()]}")
+
+    def get_active_players(self):
+        return [p for p in self.players if p and not p.is_bust]
+
+    def resolve_initiative(self):
+        if not self.initiative_rolls:
+            self.roll_initiative()
             
         max_roll = max(self.initiative_rolls.values())
         highest_players = [p for p, roll in self.initiative_rolls.items() if roll == max_roll]
         
         if len(highest_players) > 1:
             self.tied_players = highest_players
+            self.starter = None
             self.message = f"Tie! {', '.join([p.name for p in highest_players])} roll again!"
-            self.state_timer = 150
+            # CLEAR ROLLS for next time
+            self.initiative_rolls = {}
+            for p in self.tied_players: p.dice = []
         else:
             self.starter = highest_players[0]
-            for p in self.players: p.is_starter = False
-            self.starter.is_starter = True
-            self.message = f"{self.starter.name} wins the roll! Starting Game..."
-            self.state_timer = 150
+            self.tied_players = []
+            for p in self.players:
+                if p: p.is_starter = False
+            if self.starter:
+                self.starter.is_starter = True
+                self.message = f"{self.starter.name} wins the roll! Starting Game..."
+                print(f"DEBUG: Starter chosen: {self.starter.name}")
+            else:
+                self.message = "Tie resolving..."
+                print("DEBUG: Starter resolution failed, retrying...")
+        
+        self.state_timer = 150
 
     def start_betting(self):
         self.state = STATE_BETTING
-        for p in self.players: p.dice = [] # Clear initiative rolls
+        for p in self.players:
+            if p: p.dice = [] # Clear initiative rolls
+        
+        if not self.starter:
+            self.message = "Error: No starter player defined!"
+            self.state_timer = 150
+            return
         
         table_cap = self.get_table_cap()
         self.current_bet = 50
@@ -132,11 +159,15 @@ class Game:
         self.state = STATE_POWERUP_TURN
         
         # Set turn order: starting from starter clockwise
-        starter_idx = self.players.index(self.starter)
-        self.turn_order = []
+        try:
+            starter_idx = self.players.index(self.starter) if self.starter in self.players else 0
+        except ValueError:
+            starter_idx = 0
+            
+        print(f"DEBUG: Preparing powerup turn order from starter index {starter_idx}")
         for i in range(4):
             p = self.players[(starter_idx + i) % 4]
-            if not p.is_bust:
+            if p and not p.is_bust:
                 self.turn_order.append(p)
         self.current_turn_idx = 0
         self.prepare_powerup_turn()
@@ -148,7 +179,7 @@ class Game:
             return
 
         p = self.turn_order[self.current_turn_idx]
-        if p.is_ai:
+        if p and p.is_ai:
             self.message = f"{p.name}'s turn (AI)..."
             self.state_timer = 90 # Delay to see AI turn
         else:
@@ -264,7 +295,7 @@ class Game:
     def end_round(self):
         # Check for busts
         for p in self.players:
-            if p.points <= 0:
+            if p and p.points <= 0:
                 p.is_bust = True
                 p.points = 0
         
@@ -277,13 +308,17 @@ class Game:
             return
         else:
             self.state = STATE_SHOP
+            print("DEBUG: State changed to SHOP")
             self.message = "Round finished! Visiting the Shop..."
             # Use same turn order as power-ups
-            starter_idx = self.players.index(self.starter)
+            try:
+                starter_idx = self.players.index(self.starter) if (self.starter and self.starter in self.players) else 0
+            except ValueError:
+                starter_idx = 0
             self.turn_order = []
             for i in range(4):
                 p = self.players[(starter_idx + i) % 4]
-                if not p.is_bust:
+                if p and not p.is_bust:
                     self.turn_order.append(p)
             self.current_turn_idx = 0
             self.prepare_shop_turn()
@@ -294,7 +329,7 @@ class Game:
             return
 
         p = self.turn_order[self.current_turn_idx]
-        if p.is_ai:
+        if p and p.is_ai:
             self.message = f"{p.name} is shopping (AI)..."
             self.state_timer = 180 # Delay for AI shop
         else:
@@ -332,10 +367,12 @@ class Game:
 
     def start_next_round(self):
         self.round += 1
+        self.starter = None # CRITICAL: Reset starter for new round
         for p in self.players:
-            p.dice = []
-            p.is_starter = False
-            p.has_used_powerup = False
+            if p:
+                p.dice = []
+                p.is_starter = False
+                p.has_used_powerup = False
         self.start_initiative()
 
     def update(self):
@@ -344,6 +381,7 @@ class Game:
             if self.state_timer == 0:
                 print(f"Transitioning from {self.state}...")
                 if self.state == STATE_INITIATIVE:
+                    print("DEBUG: Initiative timer ended")
                     if self.starter:
                         self.start_betting()
                     else:
@@ -375,7 +413,7 @@ class Game:
                         self.reset_game()
             return
 
-        if self.state == STATE_BETTING and not self.starter.is_ai:
+        if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
             table_cap = self.get_table_cap()
             for btn in self.buttons:
                 if btn['rect'].collidepoint(pos):
@@ -389,13 +427,14 @@ class Game:
                         self.state = STATE_ROLL_ALL
         
         elif self.state == STATE_POWERUP_TURN:
-            p = self.turn_order[self.current_turn_idx]
-            if not p.is_ai:
-                for btn in self.buttons:
-                    if btn['rect'].collidepoint(pos):
-                        if btn['id'] == "pw_pass":
-                            self.current_turn_idx += 1
-                            self.prepare_powerup_turn()
+            if self.current_turn_idx < len(self.turn_order):
+                p = self.turn_order[self.current_turn_idx]
+                if p and not p.is_ai:
+                    for btn in self.buttons:
+                        if btn['rect'].collidepoint(pos):
+                            if btn['id'] == "pw_pass":
+                                self.current_turn_idx += 1
+                                self.prepare_powerup_turn()
                         elif btn['id'] == "pw_reroll":
                             if self.use_powerup(p, "Reroll"):
                                 self.current_turn_idx += 1
@@ -410,13 +449,14 @@ class Game:
                                 self.state_timer = 90
         
         elif self.state == STATE_SHOP:
-            p = self.turn_order[self.current_turn_idx]
-            if not p.is_ai:
-                for btn in self.buttons:
-                    if btn['rect'].collidepoint(pos):
-                        if btn['id'] == "shop_exit":
-                            self.current_turn_idx += 1
-                            self.prepare_shop_turn()
+            if self.current_turn_idx < len(self.turn_order):
+                p = self.turn_order[self.current_turn_idx]
+                if p and not p.is_ai:
+                    for btn in self.buttons:
+                        if btn['rect'].collidepoint(pos):
+                            if btn['id'] == "shop_exit":
+                                self.current_turn_idx += 1
+                                self.prepare_shop_turn()
                         elif btn['id'] == "shop_reroll":
                             if p.buy_item("Reroll", COST_REROLL):
                                 self.message = "Bought Reroll!"
@@ -505,7 +545,8 @@ class Game:
                 if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
                     needs_shift = True
                 elif self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order):
-                    if not self.turn_order[self.current_turn_idx].is_ai:
+                    p_turn = self.turn_order[self.current_turn_idx]
+                    if p_turn and not p_turn.is_ai:
                         needs_shift = True
             
             if needs_shift:
@@ -522,16 +563,18 @@ class Game:
             pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, box_width, box_height), width=2, border_radius=10)
 
             # Draw player info
-            text_color = COLOR_GREY if p.is_bust else COLOR_WHITE
-            points_color = COLOR_GREY if p.is_bust else COLOR_GOLD
+            text_color = COLOR_GREY if (p and p.is_bust) else COLOR_WHITE
+            points_color = COLOR_GREY if (p and p.is_bust) else COLOR_GOLD
             is_start = self.starter and p == self.starter
-            name_text = self.font.render(f"{p.name} {'(STARTER)' if is_start else ''}", True, text_color)
-            points_text = self.font.render(f"Points: {p.points}", True, points_color)
+            p_name = p.name if p else "Unknown"
+            p_points = p.points if p else 0
+            name_text = self.font.render(f"{p_name} {'(STARTER)' if is_start else ''}", True, text_color)
+            points_text = self.font.render(f"Points: {p_points}", True, points_color)
             self.screen.blit(name_text, (x + 10, y + 10))
             self.screen.blit(points_text, (x + 10, y + 40))
 
             # Draw dice if any
-            if p.dice:
+            if p and p.dice:
                 for j, val in enumerate(p.dice):
                     total_dice_w = len(p.dice) * (DICE_SIZE + 10) - 10
                     start_x = x + (box_width - total_dice_w) // 2
