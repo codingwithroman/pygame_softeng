@@ -32,9 +32,17 @@ class Player:
     def has_powerup(self, powerup_type):
         return self.inventory.get(powerup_type, 0) > 0
 
-    def use_powerup(self, powerup_type):
-        if self.has_powerup(powerup_type):
-            self.inventory[powerup_type] -= 1
+    def use_powerup(self, p_type):
+        if self.inventory.get(p_type, 0) > 0:
+            self.inventory[p_type] -= 1
+            return True
+        return False
+
+    def buy_item(self, item_name, cost):
+        # Must have at least 50 points remaining AFTER purchase
+        if self.points - cost >= 50:
+            self.points -= cost
+            self.inventory[item_name] = self.inventory.get(item_name, 0) + 1
             return True
         return False
 

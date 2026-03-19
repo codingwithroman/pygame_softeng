@@ -231,7 +231,45 @@ class Game:
         else:
             self.state = STATE_SHOP
             self.message = "Round finished! Visiting the Shop..."
-            self.state_timer = 90
+            # Use same turn order as power-ups
+            starter_idx = self.players.index(self.starter)
+            self.turn_order = []
+            for i in range(4):
+                p = self.players[(starter_idx + i) % 4]
+                if not p.is_bust:
+                    self.turn_order.append(p)
+            self.current_turn_idx = 0
+            self.prepare_shop_turn()
+
+    def prepare_shop_turn(self):
+        if self.current_turn_idx >= len(self.turn_order):
+            self.start_next_round()
+            return
+
+        p = self.turn_order[self.current_turn_idx]
+        if p.is_ai:
+            self.message = f"{p.name} is shopping (AI)..."
+            self.state_timer = 60 # Delay for AI shop
+        else:
+            self.message = f"Your turn! Buy items (Min 50 pts reserve)."
+
+    def execute_ai_shop(self):
+        p = self.turn_order[self.current_turn_idx]
+        # AI tries to buy one item it has < 2 of
+        bought = False
+        items = [("Extra Die", COST_EXTRA_DIE), ("Swap", COST_SWAP), ("Reroll", COST_REROLL)]
+        for name, cost in items:
+            if p.inventory.get(name, 0) < 2:
+                if p.buy_item(name, cost):
+                    self.message = f"{p.name} bought {name}."
+                    bought = True
+                    break
+        
+        if not bought:
+            self.message = f"{p.name} skipped the shop."
+        
+        self.current_turn_idx += 1
+        self.prepare_shop_turn()
 
     def start_next_round(self):
         self.round += 1
@@ -263,8 +301,9 @@ class Game:
                 elif self.state == STATE_SHOWDOWN:
                     self.end_round()
                 elif self.state == STATE_SHOP:
-                    # In Step 7 we implement Shop, for now skip to next round
-                    self.start_next_round()
+                    p = self.turn_order[self.current_turn_idx]
+                    if p.is_ai:
+                        self.execute_ai_shop()
 
     def handle_click(self, pos):
         if self.state == STATE_BETTING and not self.starter.is_ai:
@@ -301,6 +340,24 @@ class Game:
                             if self.use_powerup(p, "Swap"):
                                 self.current_turn_idx += 1
                                 self.state_timer = 90
+        
+        elif self.state == STATE_SHOP:
+            p = self.turn_order[self.current_turn_idx]
+            if not p.is_ai:
+                for btn in self.buttons:
+                    if btn['rect'].collidepoint(pos):
+                        if btn['id'] == "shop_exit":
+                            self.current_turn_idx += 1
+                            self.prepare_shop_turn()
+                        elif btn['id'] == "shop_reroll":
+                            if p.buy_item("Reroll", COST_REROLL):
+                                self.message = "Bought Reroll!"
+                        elif btn['id'] == "shop_swap":
+                            if p.buy_item("Swap", COST_SWAP):
+                                self.message = "Bought Swap!"
+                        elif btn['id'] == "shop_extra":
+                            if p.buy_item("Extra Die", COST_EXTRA_DIE):
+                                self.message = "Bought Extra Die!"
 
     def draw_button(self, x, y, w, h, text, color, btn_id):
         rect = pygame.Rect(x, y, w, h)
@@ -346,6 +403,16 @@ class Game:
                 if p.has_powerup("Extra Die"):
                     self.draw_button(SCREEN_WIDTH//2 + 80, 140, 120, 40, "EXTRA DIE", COLOR_BROWN, "pw_extra")
 
+        # Draw Shop Controls for human
+        if self.state == STATE_SHOP:
+            p = self.turn_order[self.current_turn_idx]
+            if not p.is_ai:
+                # Layout shop buttons
+                self.draw_button(SCREEN_WIDTH//2 - 250, 140, 120, 40, f"Reroll ({COST_REROLL})", COLOR_BROWN if p.points-COST_REROLL>=50 else COLOR_GREY, "shop_reroll")
+                self.draw_button(SCREEN_WIDTH//2 - 100, 140, 120, 40, f"Swap ({COST_SWAP})", COLOR_BROWN if p.points-COST_SWAP>=50 else COLOR_GREY, "shop_swap")
+                self.draw_button(SCREEN_WIDTH//2 + 50, 140, 140, 40, f"Extra ({COST_EXTRA_DIE})", COLOR_BROWN if p.points-COST_EXTRA_DIE>=50 else COLOR_GREY, "shop_extra")
+                self.draw_button(SCREEN_WIDTH//2 - 60, 190, 120, 40, "EXIT SHOP", (0, 100, 0), "shop_exit")
+
         # Draw Players
         for i, p in enumerate(self.players):
             # ... (rest of the drawing logic remains similar)
@@ -354,18 +421,25 @@ class Game:
             layout_pos = [
                 (SCREEN_WIDTH // 2 - 125, SCREEN_HEIGHT - 200), # P1
                 (50, SCREEN_HEIGHT // 2 - 90),                  # P2
-                (SCREEN_WIDTH // 2 - 125, 230 if self.state in [STATE_BETTING, STATE_POWERUP_TURN] and not self.starter.is_ai else 120),# P3 shift down if betting
+                (SCREEN_WIDTH // 2 - 125, 120),                 # P3
                 (SCREEN_WIDTH - 300, SCREEN_HEIGHT // 2 - 90)   # P4
             ]
-            # (Keeping the layout consistent but shifting P3 if buttons are in the way)
             x, y = layout_pos[i]
-            if i == 2 and self.state == STATE_BETTING and not self.starter.is_ai:
-                y = 250
-            elif i == 2 and self.state == STATE_POWERUP_TURN and self.turn_order and not self.turn_order[self.current_turn_idx].is_ai:
+            
+            # Shifting P3 logic
+            needs_shift = False
+            if i == 2:
+                if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
+                    needs_shift = True
+                elif self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order):
+                    if not self.turn_order[self.current_turn_idx].is_ai:
+                        needs_shift = True
+            
+            if needs_shift:
                 y = 250 
 
             # highlight current turn
-            is_turn = self.state == STATE_POWERUP_TURN and self.turn_order and self.current_turn_idx < len(self.turn_order) and self.turn_order[self.current_turn_idx] == p
+            is_turn = self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order) and self.turn_order[self.current_turn_idx] == p
             
             # Draw box
             color = COLOR_GREY if p.is_bust else (COLOR_RED if p.is_starter else COLOR_BROWN)
