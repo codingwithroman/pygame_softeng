@@ -1,7 +1,12 @@
 import pygame
 import sys
 import random
-from constants import *
+from constants import (
+    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, COLOR_TABLE_GREEN, COLOR_WHITE, COLOR_BLACK,
+    COLOR_GREY, COLOR_BROWN, COLOR_RED, COLOR_GOLD, STATE_INITIATIVE, STATE_BETTING,
+    STATE_ROLL_ALL, STATE_POWERUP_TURN, STATE_SHOWDOWN, STATE_SHOP, STATE_GAMEOVER,
+    COST_REROLL, COST_SWAP, COST_EXTRA_DIE, MAX_ROUNDS, CURRENCY_STEP, MAX_BET, DICE_SIZE
+)
 from dice_renderer import draw_die
 from player import Player
 
@@ -344,21 +349,23 @@ class Game:
                     else:
                         self.resolve_initiative()
                 elif self.state == STATE_BETTING:
-                    if self.starter.is_ai:
+                    if self.starter and self.starter.is_ai:
                         self.collect_bets()
                         self.state = STATE_ROLL_ALL
                 elif self.state == STATE_ROLL_ALL:
                     self.roll_all()
                 elif self.state == STATE_POWERUP_TURN:
-                    p = self.turn_order[self.current_turn_idx]
-                    if p.is_ai:
-                        self.execute_ai_powerup()
+                    if self.turn_order and self.current_turn_idx < len(self.turn_order):
+                        p = self.turn_order[self.current_turn_idx]
+                        if p and p.is_ai:
+                            self.execute_ai_powerup()
                 elif self.state == STATE_SHOWDOWN:
                     self.end_round()
                 elif self.state == STATE_SHOP:
-                    p = self.turn_order[self.current_turn_idx]
-                    if p.is_ai:
-                        self.execute_ai_shop_turn()
+                    if self.turn_order and self.current_turn_idx < len(self.turn_order):
+                        p = self.turn_order[self.current_turn_idx]
+                        if p and p.is_ai:
+                            self.execute_ai_shop_turn()
 
     def handle_click(self, pos):
         if self.state == STATE_GAMEOVER:
@@ -449,7 +456,7 @@ class Game:
         self.screen.blit(msg_text, (SCREEN_WIDTH // 2 - msg_text.get_width() // 2, 90))
 
         # Draw Betting Controls for human
-        if self.state == STATE_BETTING and not self.starter.is_ai:
+        if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
             self.draw_button(SCREEN_WIDTH//2 - 160, 130, 50, 40, "-", COLOR_BROWN, "bet_minus")
             bet_display = self.btn_font.render(f"Bet: {self.current_bet}", True, COLOR_GOLD)
             self.screen.blit(bet_display, (SCREEN_WIDTH//2 - bet_display.get_width()//2, 135))
@@ -457,9 +464,9 @@ class Game:
             self.draw_button(SCREEN_WIDTH//2 - 60, 180, 120, 40, "CONFIRM", (0, 100, 0), "bet_confirm")
 
         # Draw Power-up Controls for human
-        if self.state == STATE_POWERUP_TURN:
+        if self.state == STATE_POWERUP_TURN and self.turn_order and self.current_turn_idx < len(self.turn_order):
             p = self.turn_order[self.current_turn_idx]
-            if not p.is_ai:
+            if p and not p.is_ai:
                 self.draw_button(SCREEN_WIDTH//2 - 250, 140, 100, 40, "PASS", COLOR_GREY, "pw_pass")
                 if p.has_powerup("Reroll"):
                     self.draw_button(SCREEN_WIDTH//2 - 140, 140, 100, 40, "REROLL", COLOR_BROWN, "pw_reroll")
@@ -469,9 +476,9 @@ class Game:
                     self.draw_button(SCREEN_WIDTH//2 + 80, 140, 120, 40, "EXTRA DIE", COLOR_BROWN, "pw_extra")
 
         # Draw Shop Controls for human
-        if self.state == STATE_SHOP:
+        if self.state == STATE_SHOP and self.turn_order and self.current_turn_idx < len(self.turn_order):
             p = self.turn_order[self.current_turn_idx]
-            if not p.is_ai:
+            if p and not p.is_ai:
                 # Layout shop buttons
                 self.draw_button(SCREEN_WIDTH//2 - 250, 140, 120, 40, f"Reroll ({COST_REROLL})", COLOR_BROWN if p.points-COST_REROLL>=50 else COLOR_GREY, "shop_reroll")
                 self.draw_button(SCREEN_WIDTH//2 - 100, 140, 120, 40, f"Swap ({COST_SWAP})", COLOR_BROWN if p.points-COST_SWAP>=50 else COLOR_GREY, "shop_swap")
@@ -480,6 +487,7 @@ class Game:
 
         # Draw Players
         for i, p in enumerate(self.players):
+            if not p: continue
             # ... (rest of the drawing logic remains similar)
             box_width = 250
             box_height = 180
@@ -507,7 +515,7 @@ class Game:
             is_turn = self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order) and self.turn_order[self.current_turn_idx] == p
             
             # Draw box
-            color = COLOR_GREY if p.is_bust else (COLOR_RED if p.is_starter else COLOR_BROWN)
+            color = COLOR_GREY if p.is_bust else (COLOR_RED if self.starter and p == self.starter else COLOR_BROWN)
             pygame.draw.rect(self.screen, color, (x, y, box_width, box_height), border_radius=10)
             if is_turn:
                 pygame.draw.rect(self.screen, COLOR_GOLD, (x-4, y-4, box_width+8, box_height+8), width=4, border_radius=12)
@@ -516,21 +524,24 @@ class Game:
             # Draw player info
             text_color = COLOR_GREY if p.is_bust else COLOR_WHITE
             points_color = COLOR_GREY if p.is_bust else COLOR_GOLD
-            name_text = self.font.render(f"{p.name} {'(STARTER)' if p.is_starter else ''}", True, text_color)
+            is_start = self.starter and p == self.starter
+            name_text = self.font.render(f"{p.name} {'(STARTER)' if is_start else ''}", True, text_color)
             points_text = self.font.render(f"Points: {p.points}", True, points_color)
             self.screen.blit(name_text, (x + 10, y + 10))
             self.screen.blit(points_text, (x + 10, y + 40))
 
             # Draw dice if any
-            for j, val in enumerate(p.dice):
-                total_dice_w = len(p.dice) * (DICE_SIZE + 10) - 10
-                start_x = x + (box_width - total_dice_w) // 2
-                draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 70, val)
+            if p.dice:
+                for j, val in enumerate(p.dice):
+                    total_dice_w = len(p.dice) * (DICE_SIZE + 10) - 10
+                    start_x = x + (box_width - total_dice_w) // 2
+                    draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 70, val)
 
             # Draw inventory summary
-            inv_str = ", ".join([f"{k[0]}:{v}" for k, v in p.inventory.items()])
-            inv_text = self.font.render(f"Inv: {inv_str}", True, COLOR_WHITE)
-            self.screen.blit(inv_text, (x + 10, y + 145))
+            if p and p.inventory:
+                inv_str = ", ".join([f"{k[0]}:{v}" for k, v in p.inventory.items()])
+                inv_text = self.font.render(f"Inv: {inv_str}", True, COLOR_WHITE)
+                self.screen.blit(inv_text, (x + 10, y + 145))
 
     def draw_gameover(self):
         self.screen.fill(COLOR_TABLE_GREEN)
@@ -540,13 +551,15 @@ class Game:
         # Winners info (turn_order was sorted by points in end_round)
         if self.turn_order:
             winner = self.turn_order[0]
-            win_msg = self.large_font.render(f"🏆 WINNER: {winner.name} 🏆", True, COLOR_GOLD)
-            pts_msg = self.large_font.render(f"Final Score: {winner.points} pts", True, COLOR_WHITE)
-            self.screen.blit(win_msg, (SCREEN_WIDTH // 2 - win_msg.get_width() // 2, 160))
-            self.screen.blit(pts_msg, (SCREEN_WIDTH // 2 - pts_msg.get_width() // 2, 210))
+            if winner:
+                winner_text = self.large_font.render(f"🏆 WINNER: {winner.name} 🏆", True, COLOR_GOLD)
+                score_text = self.large_font.render(f"{winner.points} POINTS", True, COLOR_GOLD)
+                self.screen.blit(winner_text, (SCREEN_WIDTH // 2 - winner_text.get_width() // 2, 150))
+                self.screen.blit(score_text, (SCREEN_WIDTH // 2 - score_text.get_width() // 2, 210))
             
             # Display standings
             for i, p in enumerate(self.turn_order):
+                if not p: continue
                 color = COLOR_GOLD if i == 0 else COLOR_WHITE
                 txt = self.font.render(f"{i+1}. {p.name}: {p.points} points", True, color)
                 self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 300 + i * 35))
