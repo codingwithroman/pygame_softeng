@@ -148,7 +148,7 @@ class Game:
             p.subtract_points(self.current_bet)
             self.pot += self.current_bet
         self.message = f"All players paid {self.current_bet}. Pot: {self.pot}. Roll All!"
-        self.state_timer = 60
+        self.state_timer = 120
 
     def roll_all(self):
         active_players = self.get_active_players()
@@ -165,6 +165,7 @@ class Game:
             starter_idx = 0
             
         print(f"DEBUG: Preparing powerup turn order from starter index {starter_idx}")
+        self.turn_order = []
         for i in range(4):
             p = self.players[(starter_idx + i) % 4]
             if p and not p.is_bust:
@@ -178,15 +179,20 @@ class Game:
             self.resolve_showdown()
             return
 
-        p = self.turn_order[self.current_turn_idx]
+        p = None
+        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+            p = self.turn_order[self.current_turn_idx]
+
         if p and p.is_ai:
             self.message = f"{p.name}'s turn (AI)..."
-            self.state_timer = 90 # Delay to see AI turn
+            self.state_timer = 150 # Delay to see AI turn
         else:
             self.message = f"Your turn! Use a power-up or Pass."
 
     def execute_ai_powerup(self):
-        p = self.turn_order[self.current_turn_idx]
+        p = None
+        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+            p = self.turn_order[self.current_turn_idx]
         if not p: return
         my_score = sum(p.dice)
         active_opponents = [o for o in self.get_active_players() if o != p]
@@ -328,7 +334,9 @@ class Game:
             self.start_next_round()
             return
 
-        p = self.turn_order[self.current_turn_idx]
+        p = None
+        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+            p = self.turn_order[self.current_turn_idx]
         if p and p.is_ai:
             self.message = f"{p.name} is shopping (AI)..."
             self.state_timer = 180 # Delay for AI shop
@@ -336,7 +344,9 @@ class Game:
             self.message = f"Your turn! Buy items (Min 50 pts reserve)."
 
     def execute_ai_shop_turn(self):
-        p = self.turn_order[self.current_turn_idx]
+        p = None
+        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+            p = self.turn_order[self.current_turn_idx]
         if not p: return
         bought = False
         item_name = ""
@@ -394,14 +404,18 @@ class Game:
                     self.roll_all()
                 elif self.state == STATE_POWERUP_TURN:
                     if self.turn_order and self.current_turn_idx < len(self.turn_order):
-                        p = self.turn_order[self.current_turn_idx]
+                        p = None
+                        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                            p = self.turn_order[self.current_turn_idx]
                         if p and p.is_ai:
                             self.execute_ai_powerup()
                 elif self.state == STATE_SHOWDOWN:
                     self.end_round()
                 elif self.state == STATE_SHOP:
                     if self.turn_order and self.current_turn_idx < len(self.turn_order):
-                        p = self.turn_order[self.current_turn_idx]
+                        p = None
+                        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                            p = self.turn_order[self.current_turn_idx]
                         if p and p.is_ai:
                             self.execute_ai_shop_turn()
 
@@ -428,44 +442,63 @@ class Game:
         
         elif self.state == STATE_POWERUP_TURN:
             if self.current_turn_idx < len(self.turn_order):
-                p = self.turn_order[self.current_turn_idx]
+                p = None
+                if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                    p = self.turn_order[self.current_turn_idx]
                 if p and not p.is_ai:
                     for btn in self.buttons:
                         if btn['rect'].collidepoint(pos):
+
                             if btn['id'] == "pw_pass":
                                 self.current_turn_idx += 1
                                 self.prepare_powerup_turn()
-                        elif btn['id'] == "pw_reroll":
-                            if self.use_powerup(p, "Reroll"):
-                                self.current_turn_idx += 1
-                                self.state_timer = 90
-                        elif btn['id'] == "pw_extra":
-                            if self.use_powerup(p, "Extra Die"):
-                                self.current_turn_idx += 1
-                                self.state_timer = 90
-                        elif btn['id'] == "pw_swap":
-                            if self.use_powerup(p, "Swap"):
-                                self.current_turn_idx += 1
-                                self.state_timer = 90
+
+                            elif btn['id'] == "pw_reroll":
+                                if self.use_powerup(p, "Reroll"):
+                                    self.current_turn_idx += 1
+                                    self.state_timer = 120
+
+                            elif btn['id'] == "pw_extra":
+                                if self.use_powerup(p, "Extra Die"):
+                                    self.current_turn_idx += 1
+                                    self.state_timer = 120
+
+                            elif btn['id'] == "pw_swap":
+                                if self.use_powerup(p, "Swap"):
+                                    self.current_turn_idx += 1
+                                    self.state_timer = 120
         
         elif self.state == STATE_SHOP:
             if self.current_turn_idx < len(self.turn_order):
-                p = self.turn_order[self.current_turn_idx]
+                p = None
+                if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                    p = self.turn_order[self.current_turn_idx]
+
                 if p and not p.is_ai:
                     for btn in self.buttons:
                         if btn['rect'].collidepoint(pos):
+
                             if btn['id'] == "shop_exit":
                                 self.current_turn_idx += 1
                                 self.prepare_shop_turn()
-                        elif btn['id'] == "shop_reroll":
-                            if p.buy_item("Reroll", COST_REROLL):
-                                self.message = "Bought Reroll!"
-                        elif btn['id'] == "shop_swap":
-                            if p.buy_item("Swap", COST_SWAP):
-                                self.message = "Bought Swap!"
-                        elif btn['id'] == "shop_extra":
-                            if p.buy_item("Extra Die", COST_EXTRA_DIE):
-                                self.message = "Bought Extra Die!"
+
+                            elif btn['id'] == "shop_reroll":
+                                if p.buy_item("Reroll", COST_REROLL):
+                                    self.message = "Bought Reroll!"
+                                    self.current_turn_idx += 1
+                                    self.prepare_shop_turn()
+
+                            elif btn['id'] == "shop_swap":
+                                if p.buy_item("Swap", COST_SWAP):
+                                    self.message = "Bought Swap!"
+                                    self.current_turn_idx += 1
+                                    self.prepare_shop_turn()
+
+                            elif btn['id'] == "shop_extra":
+                                if p.buy_item("Extra Die", COST_EXTRA_DIE):
+                                    self.message = "Bought Extra Die!"
+                                    self.current_turn_idx += 1
+                                    self.prepare_shop_turn()
 
     def draw_button(self, x, y, w, h, text, color, btn_id):
         rect = pygame.Rect(x, y, w, h)
@@ -476,115 +509,155 @@ class Game:
         self.buttons.append({'rect': rect, 'id': btn_id})
 
     def draw(self):
-        self.screen.fill(COLOR_TABLE_GREEN)
-        self.buttons = [] # Reset buttons each frame
-        
-        if self.state == STATE_GAMEOVER:
-            self.draw_gameover()
-            return # Don't draw other game elements if game is over
-        
-        # Draw Title/Round info
-        status_text = self.large_font.render(f"Round {self.round} - {self.state}", True, COLOR_GOLD)
-        self.screen.blit(status_text, (SCREEN_WIDTH // 2 - status_text.get_width() // 2, 20))
-        
-        # Draw Pot info
-        pot_text = self.font.render(f"POT: {self.pot}", True, COLOR_GOLD)
-        self.screen.blit(pot_text, (SCREEN_WIDTH // 2 - pot_text.get_width() // 2, 60))
+        self.buttons = []
 
-        # Draw Message
-        msg_text = self.font.render(self.message, True, COLOR_WHITE)
-        self.screen.blit(msg_text, (SCREEN_WIDTH // 2 - msg_text.get_width() // 2, 90))
+        # ===== BACKGROUND (CASINO TABLE) =====
+        self.screen.fill((15, 60, 20))
 
-        # Draw Betting Controls for human
-        if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
-            self.draw_button(SCREEN_WIDTH//2 - 160, 130, 50, 40, "-", COLOR_BROWN, "bet_minus")
-            bet_display = self.btn_font.render(f"Bet: {self.current_bet}", True, COLOR_GOLD)
-            self.screen.blit(bet_display, (SCREEN_WIDTH//2 - bet_display.get_width()//2, 135))
-            self.draw_button(SCREEN_WIDTH//2 + 110, 130, 50, 40, "+", COLOR_BROWN, "bet_plus")
-            self.draw_button(SCREEN_WIDTH//2 - 60, 180, 120, 40, "CONFIRM", (0, 100, 0), "bet_confirm")
+        pygame.draw.ellipse(self.screen, (0, 110, 0),
+                            (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80))
+        pygame.draw.ellipse(self.screen, (212, 175, 55),
+                            (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80), 6)
 
-        # Draw Power-up Controls for human
-        if self.state == STATE_POWERUP_TURN and self.turn_order and self.current_turn_idx < len(self.turn_order):
-            p = self.turn_order[self.current_turn_idx]
-            if p and not p.is_ai:
-                self.draw_button(SCREEN_WIDTH//2 - 250, 140, 100, 40, "PASS", COLOR_GREY, "pw_pass")
-                if p.has_powerup("Reroll"):
-                    self.draw_button(SCREEN_WIDTH//2 - 140, 140, 100, 40, "REROLL", COLOR_BROWN, "pw_reroll")
-                if p.has_powerup("Swap"):
-                    self.draw_button(SCREEN_WIDTH//2 - 30, 140, 100, 40, "SWAP", COLOR_BROWN, "pw_swap")
-                if p.has_powerup("Extra Die"):
-                    self.draw_button(SCREEN_WIDTH//2 + 80, 140, 120, 40, "EXTRA DIE", COLOR_BROWN, "pw_extra")
+        pygame.draw.circle(self.screen, (0, 90, 0),
+                        (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 180)
 
-        # Draw Shop Controls for human
-        if self.state == STATE_SHOP and self.turn_order and self.current_turn_idx < len(self.turn_order):
-            p = self.turn_order[self.current_turn_idx]
-            if p and not p.is_ai:
-                # Layout shop buttons
-                self.draw_button(SCREEN_WIDTH//2 - 250, 140, 120, 40, f"Reroll ({COST_REROLL})", COLOR_BROWN if p.points-COST_REROLL>=50 else COLOR_GREY, "shop_reroll")
-                self.draw_button(SCREEN_WIDTH//2 - 100, 140, 120, 40, f"Swap ({COST_SWAP})", COLOR_BROWN if p.points-COST_SWAP>=50 else COLOR_GREY, "shop_swap")
-                self.draw_button(SCREEN_WIDTH//2 + 50, 140, 140, 40, f"Extra ({COST_EXTRA_DIE})", COLOR_BROWN if p.points-COST_EXTRA_DIE>=50 else COLOR_GREY, "shop_extra")
-                self.draw_button(SCREEN_WIDTH//2 - 60, 190, 120, 40, "EXIT SHOP", (0, 100, 0), "shop_exit")
+        # ===== TITLE =====
+        title = self.large_font.render("HIGH ROLLER", True, COLOR_GOLD)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 10))
 
-        # Draw Players
+        status = self.font.render(f"Round {self.round} | {self.state}", True, COLOR_WHITE)
+        self.screen.blit(status, (SCREEN_WIDTH // 2 - status.get_width() // 2, 60))
+
+        # ===== POT (CENTER) =====
+        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+
+        pygame.draw.circle(self.screen, (30, 30, 30), (cx, cy), 75)
+        pygame.draw.circle(self.screen, COLOR_GOLD, (cx, cy), 75, 4)
+
+        pot_text = self.large_font.render(f"${self.pot}", True, COLOR_GOLD)
+        self.screen.blit(pot_text, (cx - pot_text.get_width() // 2, cy - 25))
+
+        # ===== MESSAGE =====
+        msg = self.font.render(self.message, True, COLOR_WHITE)
+        self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 100))
+
+        # ===== SHOP MODE BACKGROUND =====
+        if self.state == STATE_SHOP:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(180)
+            overlay.fill((20, 20, 35))
+            self.screen.blit(overlay, (0, 0))
+
+        # ===== PLAYER PANELS =====
+        positions = [
+            (SCREEN_WIDTH // 2 - 130, SCREEN_HEIGHT - 190),  # P1 (bottom)
+            (50, SCREEN_HEIGHT // 2 - 90),                   # P2 (left)
+            (SCREEN_WIDTH // 2 - 130, 130),                  # P3 (TOP — FIXED)
+            (SCREEN_WIDTH - 300, SCREEN_HEIGHT // 2 - 90)    # P4 (right)
+        ]
+
         for i, p in enumerate(self.players):
-            if not p: continue
-            # ... (rest of the drawing logic remains similar)
-            box_width = 250
-            box_height = 180
-            layout_pos = [
-                (SCREEN_WIDTH // 2 - 125, SCREEN_HEIGHT - 200), # P1
-                (50, SCREEN_HEIGHT // 2 - 90),                  # P2
-                (SCREEN_WIDTH // 2 - 125, 120),                 # P3
-                (SCREEN_WIDTH - 300, SCREEN_HEIGHT // 2 - 90)   # P4
-            ]
-            x, y = layout_pos[i]
-            
-            # Shifting P3 logic
-            needs_shift = False
-            if i == 2:
-                if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
-                    needs_shift = True
-                elif self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order):
-                    p_turn = self.turn_order[self.current_turn_idx]
-                    if p_turn and not p_turn.is_ai:
-                        needs_shift = True
-            
-            if needs_shift:
-                y = 250 
+            if not p:
+                continue
 
-            # highlight current turn
-            is_turn = self.state in [STATE_POWERUP_TURN, STATE_SHOP] and self.turn_order and self.current_turn_idx < len(self.turn_order) and self.turn_order[self.current_turn_idx] == p
-            
-            # Draw box
-            color = COLOR_GREY if p.is_bust else (COLOR_RED if self.starter and p == self.starter else COLOR_BROWN)
-            pygame.draw.rect(self.screen, color, (x, y, box_width, box_height), border_radius=10)
+            x, y = positions[i]
+            w, h = 260, 170
+
+            # Panel base
+            panel_color = (40, 40, 40) if not p.is_bust else (80, 80, 80)
+            pygame.draw.rect(self.screen, panel_color, (x, y, w, h), border_radius=14)
+
+            # Gold border if starter
+            if self.starter and p == self.starter:
+                pygame.draw.rect(self.screen, COLOR_GOLD, (x-3, y-3, w+6, h+6), 3, border_radius=16)
+
+            # Turn highlight
+            is_turn = (
+                self.state in [STATE_POWERUP_TURN, STATE_SHOP] and
+                self.turn_order and
+                self.current_turn_idx < len(self.turn_order) and
+                self.turn_order[self.current_turn_idx] == p
+            )
+
             if is_turn:
-                pygame.draw.rect(self.screen, COLOR_GOLD, (x-4, y-4, box_width+8, box_height+8), width=4, border_radius=12)
-            pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, box_width, box_height), width=2, border_radius=10)
+                pygame.draw.rect(self.screen, (0, 255, 255),
+                                (x-5, y-5, w+10, h+10), 3, border_radius=16)
 
-            # Draw player info
-            text_color = COLOR_GREY if (p and p.is_bust) else COLOR_WHITE
-            points_color = COLOR_GREY if (p and p.is_bust) else COLOR_GOLD
-            is_start = self.starter and p == self.starter
-            p_name = p.name if p else "Unknown"
-            p_points = p.points if p else 0
-            name_text = self.font.render(f"{p_name} {'(STARTER)' if is_start else ''}", True, text_color)
-            points_text = self.font.render(f"Points: {p_points}", True, points_color)
-            self.screen.blit(name_text, (x + 10, y + 10))
-            self.screen.blit(points_text, (x + 10, y + 40))
+            pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, w, h), 2, border_radius=14)
 
-            # Draw dice if any
-            if p and p.dice:
+            # Player name + points
+            name = self.font.render(p.name, True, COLOR_WHITE)
+            pts = self.font.render(f"${p.points}", True, COLOR_GOLD)
+
+            self.screen.blit(name, (x + 10, y + 10))
+            self.screen.blit(pts, (x + 10, y + 40))
+
+            # Dice (centered)
+            if p.dice:
+                total_w = len(p.dice) * (DICE_SIZE + 10) - 10
+                start_x = x + (w - total_w) // 2
+
                 for j, val in enumerate(p.dice):
-                    total_dice_w = len(p.dice) * (DICE_SIZE + 10) - 10
-                    start_x = x + (box_width - total_dice_w) // 2
                     draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 70, val)
 
-            # Draw inventory summary
-            if p and p.inventory:
-                inv_str = ", ".join([f"{k[0]}:{v}" for k, v in p.inventory.items()])
-                inv_text = self.font.render(f"Inv: {inv_str}", True, COLOR_WHITE)
-                self.screen.blit(inv_text, (x + 10, y + 145))
+            # Inventory
+            if p.inventory:
+                inv = ", ".join([f"{k[0]}:{v}" for k, v in p.inventory.items()])
+                inv_text = self.font.render(inv, True, COLOR_WHITE)
+                self.screen.blit(inv_text, (x + 10, y + 140))
+
+        # ===== BUTTONS =====
+
+        # Betting
+        if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
+            self.draw_button(cx - 100, 180, 50, 40, "-", COLOR_BROWN, "bet_minus")
+            self.draw_button(cx + 50, 140, 50, 40, "+", COLOR_BROWN, "bet_plus")
+
+            bet_text = self.btn_font.render(f"${self.current_bet}", True, COLOR_GOLD)
+            self.screen.blit(bet_text, (cx - bet_text.get_width() // 2, 145))
+
+            self.draw_button(cx - 60, 240, 120, 45, "CONFIRM", (0, 120, 0), "bet_confirm")
+
+        # Powerups
+        if self.state == STATE_POWERUP_TURN and self.turn_order:
+            p = None
+            if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                p = self.turn_order[self.current_turn_idx]
+            if p and not p.is_ai:
+                self.draw_button(cx - 260, 140, 100, 40, "PASS", COLOR_GREY, "pw_pass")
+
+                if p.has_powerup("Reroll"):
+                    self.draw_button(cx - 140, 140, 100, 40, "REROLL", COLOR_BROWN, "pw_reroll")
+
+                if p.has_powerup("Swap"):
+                    self.draw_button(cx - 20, 140, 100, 40, "SWAP", COLOR_BROWN, "pw_swap")
+
+                if p.has_powerup("Extra Die"):
+                    self.draw_button(cx + 100, 140, 120, 40, "EXTRA", COLOR_BROWN, "pw_extra")
+
+        # Shop
+        if self.state == STATE_SHOP and self.turn_order:
+            p = None
+            if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
+                p = self.turn_order[self.current_turn_idx]
+            if p and not p.is_ai:
+                self.draw_button(cx - 220, 140, 130, 45,
+                                f"REROLL ({COST_REROLL})",
+                                COLOR_BROWN if p.points >= COST_REROLL + 50 else COLOR_GREY,
+                                "shop_reroll")
+
+                self.draw_button(cx - 60, 140, 130, 45,
+                                f"SWAP ({COST_SWAP})",
+                                COLOR_BROWN if p.points >= COST_SWAP + 50 else COLOR_GREY,
+                                "shop_swap")
+
+                self.draw_button(cx + 100, 140, 150, 45,
+                                f"EXTRA ({COST_EXTRA_DIE})",
+                                COLOR_BROWN if p.points >= COST_EXTRA_DIE + 50 else COLOR_GREY,
+                                "shop_extra")
+
+                self.draw_button(cx - 60, 200, 120, 45, "EXIT", (0, 120, 0), "shop_exit")
 
     def draw_gameover(self):
         self.screen.fill(COLOR_TABLE_GREEN)
@@ -634,10 +707,13 @@ def main():
                     game.reset_game()
 
         game.update()
-        game.draw()
+        if game.state == STATE_GAMEOVER:
+            game.draw_gameover()
+        else:
+            game.draw()
 
         pygame.display.flip()
-        game.clock.tick(FPS)
+        game.clock.tick(30)
 
     pygame.quit()
 
