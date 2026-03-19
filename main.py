@@ -359,6 +359,13 @@ class Game:
                         self.execute_ai_shop_turn()
 
     def handle_click(self, pos):
+        if self.state == STATE_GAMEOVER:
+            for btn in self.buttons:
+                if btn['rect'].collidepoint(pos):
+                    if btn['id'] == "play_again":
+                        self.reset_game()
+            return
+
         if self.state == STATE_BETTING and not self.starter.is_ai:
             table_cap = self.get_table_cap()
             for btn in self.buttons:
@@ -527,21 +534,27 @@ class Game:
     def draw_gameover(self):
         self.screen.fill(COLOR_TABLE_GREEN)
         title = self.large_font.render("GAME OVER", True, COLOR_GOLD)
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
         
         # Winners info (turn_order was sorted by points in end_round)
         if self.turn_order:
             winner = self.turn_order[0]
-            win_msg = self.large_font.render(f"WINNER: {winner.name} ({winner.points} pts)", True, COLOR_WHITE)
-            self.screen.blit(win_msg, (SCREEN_WIDTH // 2 - win_msg.get_width() // 2, 200))
+            win_msg = self.large_font.render(f"🏆 WINNER: {winner.name} 🏆", True, COLOR_GOLD)
+            pts_msg = self.large_font.render(f"Final Score: {winner.points} pts", True, COLOR_WHITE)
+            self.screen.blit(win_msg, (SCREEN_WIDTH // 2 - win_msg.get_width() // 2, 160))
+            self.screen.blit(pts_msg, (SCREEN_WIDTH // 2 - pts_msg.get_width() // 2, 210))
             
             # Display standings
             for i, p in enumerate(self.turn_order):
-                txt = self.font.render(f"{i+1}. {p.name}: {p.points} points", True, COLOR_WHITE)
-                self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 300 + i * 40))
+                color = COLOR_GOLD if i == 0 else COLOR_WHITE
+                txt = self.font.render(f"{i+1}. {p.name}: {p.points} points", True, color)
+                self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 300 + i * 35))
             
-        restart_msg = self.font.render("Press 'R' to Restart or 'ESC' to Quit", True, COLOR_GOLD)
-        self.screen.blit(restart_msg, (SCREEN_WIDTH // 2 - restart_msg.get_width() // 2, SCREEN_HEIGHT - 100))
+        # UI Buttons for Restart
+        self.draw_button(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 180, 200, 50, "PLAY AGAIN", (0, 150, 0), "play_again")
+        
+        restart_msg = self.font.render("Press 'R' to Restart or 'ESC' to Quit", True, COLOR_GREY)
+        self.screen.blit(restart_msg, (SCREEN_WIDTH // 2 - restart_msg.get_width() // 2, SCREEN_HEIGHT - 80))
 
 def main():
     pygame.init()
