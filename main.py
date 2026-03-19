@@ -13,31 +13,43 @@ class Game:
         self.large_font = pygame.font.SysFont("Arial", 40, bold=True)
         self.btn_font = pygame.font.SysFont("Arial", 24, bold=True)
         
+        # Initialize attributes to satisfy linter
+        self.players = []
+        self.round = 1
+        self.pot = 0
+        self.state = STATE_INITIATIVE
+        self.starter = None
+        self.turn_order = []
+        self.current_turn_idx = 0
+        self.message = ""
+        self.state_timer = 0
+        self.current_bet = 50
+        self.initiative_rolls = {}
+        self.tied_players = []
+        self.buttons = []
+        
+        self.reset_game()
+
+    def reset_game(self):
         self.players = [
             Player("P1 (You)", is_ai=False),
             Player("P2 (AI)", is_ai=True, personality="Aggressive"),
             Player("P3 (AI)", is_ai=True, personality="Balanced"),
             Player("P4 (AI)", is_ai=True, personality="Defensive")
         ]
-        
-        self.state = STATE_INITIATIVE
         self.round = 1
         self.pot = 0
-        self.current_bet = 50
+        self.state = STATE_INITIATIVE
         self.starter = None
         self.turn_order = []
         self.current_turn_idx = 0
-        
-        # State specific variables
+        self.message = "Game Started! Roll for initiative."
+        self.state_timer = 0
+        self.current_bet = 50
         self.initiative_rolls = {} 
         self.tied_players = []
-        self.message = "Rolling for Initiative..."
-        self.state_timer = 0
-        
-        # UI Buttons
         self.buttons = []
         
-        # Start game
         self.start_initiative()
 
     def get_table_cap(self):
@@ -236,13 +248,12 @@ class Game:
                 p.points = 0
         
         active_players = self.get_active_players()
-        if len(active_players) <= 1 or self.round >= MAX_ROUNDS:
+        if len(active_players) <= 1 or self.round > MAX_ROUNDS:
             self.state = STATE_GAMEOVER
-            if len(active_players) == 1:
-                self.message = f"Game Over! {active_players[0].name} Wins!"
-            else:
-                top_player = max(self.players, key=lambda x: x.points)
-                self.message = f"Game Over! {top_player.name} is the Winner!"
+            self.message = "Game Over!"
+            # Sort players by points for standings
+            self.turn_order = sorted(self.players, key=lambda x: x.points, reverse=True)
+            return
         else:
             self.state = STATE_SHOP
             self.message = "Round finished! Visiting the Shop..."
@@ -394,6 +405,10 @@ class Game:
         self.screen.fill(COLOR_TABLE_GREEN)
         self.buttons = [] # Reset buttons each frame
         
+        if self.state == STATE_GAMEOVER:
+            self.draw_gameover()
+            return # Don't draw other game elements if game is over
+        
         # Draw Title/Round info
         status_text = self.large_font.render(f"Round {self.round} - {self.state}", True, COLOR_GOLD)
         self.screen.blit(status_text, (SCREEN_WIDTH // 2 - status_text.get_width() // 2, 20))
@@ -472,8 +487,10 @@ class Game:
             pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, box_width, box_height), width=2, border_radius=10)
 
             # Draw player info
-            name_text = self.font.render(f"{p.name} {'(STARTER)' if p.is_starter else ''}", True, COLOR_WHITE)
-            points_text = self.font.render(f"Points: {p.points}", True, COLOR_GOLD)
+            text_color = COLOR_GREY if p.is_bust else COLOR_WHITE
+            points_color = COLOR_GREY if p.is_bust else COLOR_GOLD
+            name_text = self.font.render(f"{p.name} {'(STARTER)' if p.is_starter else ''}", True, text_color)
+            points_text = self.font.render(f"Points: {p.points}", True, points_color)
             self.screen.blit(name_text, (x + 10, y + 10))
             self.screen.blit(points_text, (x + 10, y + 40))
 
@@ -488,6 +505,25 @@ class Game:
             inv_text = self.font.render(f"Inv: {inv_str}", True, COLOR_WHITE)
             self.screen.blit(inv_text, (x + 10, y + 145))
 
+    def draw_gameover(self):
+        self.screen.fill(COLOR_TABLE_GREEN)
+        title = self.large_font.render("GAME OVER", True, COLOR_GOLD)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+        
+        # Winners info (turn_order was sorted by points in end_round)
+        if self.turn_order:
+            winner = self.turn_order[0]
+            win_msg = self.large_font.render(f"WINNER: {winner.name} ({winner.points} pts)", True, COLOR_WHITE)
+            self.screen.blit(win_msg, (SCREEN_WIDTH // 2 - win_msg.get_width() // 2, 200))
+            
+            # Display standings
+            for i, p in enumerate(self.turn_order):
+                txt = self.font.render(f"{i+1}. {p.name}: {p.points} points", True, COLOR_WHITE)
+                self.screen.blit(txt, (SCREEN_WIDTH // 2 - txt.get_width() // 2, 300 + i * 40))
+            
+        restart_msg = self.font.render("Press 'R' to Restart or 'ESC' to Quit", True, COLOR_GOLD)
+        self.screen.blit(restart_msg, (SCREEN_WIDTH // 2 - restart_msg.get_width() // 2, SCREEN_HEIGHT - 100))
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -500,8 +536,13 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 game.handle_click(event.pos)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_r and game.state == STATE_GAMEOVER:
+                    game.reset_game()
 
         game.update()
         game.draw()
