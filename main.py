@@ -78,13 +78,13 @@ class Game:
         if len(highest_players) > 1:
             self.tied_players = highest_players
             self.message = f"Tie! {', '.join([p.name for p in highest_players])} roll again!"
-            self.state_timer = 90
+            self.state_timer = 150
         else:
             self.starter = highest_players[0]
             for p in self.players: p.is_starter = False
             self.starter.is_starter = True
             self.message = f"{self.starter.name} wins the roll! Starting Game..."
-            self.state_timer = 90
+            self.state_timer = 150
 
     def start_betting(self):
         self.state = STATE_BETTING
@@ -104,7 +104,7 @@ class Game:
                 self.current_bet = 50
             
             self.message = f"{self.starter.name} ({self.starter.personality}) set the bet to {self.current_bet}."
-            self.state_timer = 120 
+            self.state_timer = 180 
         else:
             self.message = f"Your turn! Set the bet (Table Cap: {table_cap})"
             # Buttons will be created in draw/handled in event loop
@@ -150,13 +150,18 @@ class Game:
 
     def execute_ai_powerup(self):
         p = self.turn_order[self.current_turn_idx]
+        if not p: return
         my_score = sum(p.dice)
         active_opponents = [o for o in self.get_active_players() if o != p]
-        if not active_opponents: return
+        if not active_opponents:
+            self.current_turn_idx += 1
+            self.prepare_powerup_turn()
+            return
 
         best_opp = max(active_opponents, key=lambda x: sum(x.dice))
         opp_score = sum(best_opp.dice)
         used = False
+        choice = "Pass"
 
         if self.round == 10:
             # Last round: use anything to win
@@ -165,6 +170,7 @@ class Game:
                     if pt == "Swap" and max(best_opp.dice) <= min(p.dice): continue
                     if self.use_powerup(p, pt):
                         used = True
+                        choice = pt
                         break
         else:
             if p.personality == "Aggressive":
@@ -172,32 +178,41 @@ class Game:
                 if p.has_powerup("Extra Die") and len(p.dice) < 3:
                     self.use_powerup(p, "Extra Die")
                     used = True
+                    choice = "Extra Die"
                 elif p.has_powerup("Reroll") and my_score < 10:
                     self.use_powerup(p, "Reroll")
                     used = True
+                    choice = "Reroll"
             elif p.personality == "Balanced":
                 # Balanced uses if losing or round >= 7
                 if my_score <= opp_score or self.round >= 7:
                     if p.has_powerup("Swap") and max(best_opp.dice) > min(p.dice):
                         self.use_powerup(p, "Swap")
                         used = True
+                        choice = "Swap"
                     elif p.has_powerup("Extra Die") and len(p.dice) < 3:
                         self.use_powerup(p, "Extra Die")
                         used = True
+                        choice = "Extra Die"
             else: # Defensive
                 # Defensive only uses if losing by a lot (>3)
                 if opp_score - my_score > 3:
                     if p.has_powerup("Swap") and max(best_opp.dice) > min(p.dice):
                         self.use_powerup(p, "Swap")
                         used = True
+                        choice = "Swap"
                     elif p.has_powerup("Reroll") and my_score < 6:
                         self.use_powerup(p, "Reroll")
                         used = True
+                        choice = "Reroll"
 
         if not used:
             self.message = f"{p.name} ({p.personality}) passed."
+        else:
+            self.message = f"{p.name} ({p.personality}) used {choice}!"
         
         self.current_turn_idx += 1
+        self.state_timer = 180
         self.prepare_powerup_turn()
 
     def use_powerup(self, player, p_type):
@@ -238,7 +253,7 @@ class Game:
         else:
             self.message = f"Tie! {', '.join([w.name for w in winners])}. Pot Rolls Over!"
         
-        self.state_timer = 180 # Show results longer
+        self.state_timer = 240 # Show results longer
 
     def end_round(self):
         # Check for busts
@@ -275,13 +290,15 @@ class Game:
         p = self.turn_order[self.current_turn_idx]
         if p.is_ai:
             self.message = f"{p.name} is shopping (AI)..."
-            self.state_timer = 60 # Delay for AI shop
+            self.state_timer = 180 # Delay for AI shop
         else:
             self.message = f"Your turn! Buy items (Min 50 pts reserve)."
 
-    def execute_ai_shop(self):
+    def execute_ai_shop_turn(self):
         p = self.turn_order[self.current_turn_idx]
+        if not p: return
         bought = False
+        item_name = ""
         
         # Priority based on personality
         if p.personality == "Aggressive":
@@ -295,8 +312,10 @@ class Game:
             # Buy if has < 2 and can afford
             if p.inventory.get(name, 0) < 2:
                 if p.buy_item(name, cost):
-                    self.message = f"{p.name} ({p.personality}) bought {name}."
+                    self.message = f"{p.name} ({p.personality}) bought {name}!"
+                    self.state_timer = 150
                     bought = True
+                    item_name = name
                     break
         
         if not bought:
@@ -337,7 +356,7 @@ class Game:
                 elif self.state == STATE_SHOP:
                     p = self.turn_order[self.current_turn_idx]
                     if p.is_ai:
-                        self.execute_ai_shop()
+                        self.execute_ai_shop_turn()
 
     def handle_click(self, pos):
         if self.state == STATE_BETTING and not self.starter.is_ai:
