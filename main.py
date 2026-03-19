@@ -589,17 +589,18 @@ if __name__ == "__main__":
     try:
         print("Starting High Roller: Power-up...")
         main()
+    except KeyboardInterrupt:
+        print("\nGame closed by user (Ctrl+C).")
+    except SystemExit:
+        pass
     except Exception as e:
-        print("\n" + "="*40)
-        print(f"ERROR: The game has crashed.")
-        print(f"Reason: {e}")
-        print("="*40)
+        print("\n" + "!"*40)
+        print(f"CRITICAL ERROR: {e}")
+        print("!"*40)
         import traceback
         traceback.print_exc()
-        print("="*40)
+        print("!"*40)
         input("Press Enter to close this window...")
-    except SystemExit:
-        pass # Normal exit
     except:
-        print("An unknown error occurred.")
+        print("\nAn unexpected system error occurred.")
         input("Press Enter to close this window...")
