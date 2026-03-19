@@ -2,9 +2,10 @@ import pygame
 from constants import STARTING_CAPITAL, CURRENCY_STEP
 
 class Player:
-    def __init__(self, name, is_ai=True):
+    def __init__(self, name, is_ai=False, personality=None):
         self.name = name
         self.is_ai = is_ai
+        self.personality = personality # "Aggressive", "Balanced", "Defensive"
         self.points = STARTING_CAPITAL
         self.inventory = {
             "Reroll": 1,

@@ -15,9 +15,9 @@ class Game:
         
         self.players = [
             Player("P1 (You)", is_ai=False),
-            Player("P2 (AI)", is_ai=True),
-            Player("P3 (AI)", is_ai=True),
-            Player("P4 (AI)", is_ai=True)
+            Player("P2 (AI)", is_ai=True, personality="Aggressive"),
+            Player("P3 (AI)", is_ai=True, personality="Balanced"),
+            Player("P4 (AI)", is_ai=True, personality="Defensive")
         ]
         
         self.state = STATE_INITIATIVE
@@ -82,13 +82,17 @@ class Game:
         self.current_bet = 50
         
         if self.starter.is_ai:
-            # AI Logic: Rich (>=300) bets Max, Poor bets 50
-            if self.starter.points >= 300:
-                self.current_bet = table_cap
-            else:
+            if self.starter.personality == "Aggressive":
+                # Aggressive bets high if possible
+                self.current_bet = table_cap if self.starter.points >= 100 else 50
+            elif self.starter.personality == "Balanced":
+                # Balanced bets half of cap or 100
+                self.current_bet = min(table_cap, 150) if self.starter.points >= 300 else 50
+            else: # Defensive
                 self.current_bet = 50
-            self.message = f"{self.starter.name} set the bet to {self.current_bet}."
-            self.state_timer = 120 # Wait to show the bet
+            
+            self.message = f"{self.starter.name} ({self.starter.personality}) set the bet to {self.current_bet}."
+            self.state_timer = 120 
         else:
             self.message = f"Your turn! Set the bet (Table Cap: {table_cap})"
             # Buttons will be created in draw/handled in event loop
@@ -140,35 +144,46 @@ class Game:
 
         best_opp = max(active_opponents, key=lambda x: sum(x.dice))
         opp_score = sum(best_opp.dice)
-
         used = False
-        # In Round 10, use best available
+
         if self.round == 10:
-            if p.has_powerup("Extra Die"):
-                self.use_powerup(p, "Extra Die")
-                used = True
-            elif p.has_powerup("Swap"):
-                self.use_powerup(p, "Swap")
-                used = True
-            elif p.has_powerup("Reroll"):
-                self.use_powerup(p, "Reroll")
-                used = True
-        # Otherwise, only if losing
-        elif my_score <= opp_score:
-            if p.has_powerup("Extra Die"):
-                self.use_powerup(p, "Extra Die")
-                used = True
-            elif p.has_powerup("Swap"):
-                # Only swap if opp's highest is better than mine
-                if max(best_opp.dice) > min(p.dice):
-                    self.use_powerup(p, "Swap")
+            # Last round: use anything to win
+            for pt in ["Extra Die", "Swap", "Reroll"]:
+                if p.has_powerup(pt):
+                    if pt == "Swap" and max(best_opp.dice) <= min(p.dice): continue
+                    if self.use_powerup(p, pt):
+                        used = True
+                        break
+        else:
+            if p.personality == "Aggressive":
+                # Aggressive uses Extra Die early, or Reroll if score < 10
+                if p.has_powerup("Extra Die") and len(p.dice) < 3:
+                    self.use_powerup(p, "Extra Die")
                     used = True
-            elif p.has_powerup("Reroll") and my_score < 7:
-                self.use_powerup(p, "Reroll")
-                used = True
+                elif p.has_powerup("Reroll") and my_score < 10:
+                    self.use_powerup(p, "Reroll")
+                    used = True
+            elif p.personality == "Balanced":
+                # Balanced uses if losing or round >= 7
+                if my_score <= opp_score or self.round >= 7:
+                    if p.has_powerup("Swap") and max(best_opp.dice) > min(p.dice):
+                        self.use_powerup(p, "Swap")
+                        used = True
+                    elif p.has_powerup("Extra Die") and len(p.dice) < 3:
+                        self.use_powerup(p, "Extra Die")
+                        used = True
+            else: # Defensive
+                # Defensive only uses if losing by a lot (>3)
+                if opp_score - my_score > 3:
+                    if p.has_powerup("Swap") and max(best_opp.dice) > min(p.dice):
+                        self.use_powerup(p, "Swap")
+                        used = True
+                    elif p.has_powerup("Reroll") and my_score < 6:
+                        self.use_powerup(p, "Reroll")
+                        used = True
 
         if not used:
-            self.message = f"{p.name} passed."
+            self.message = f"{p.name} ({p.personality}) passed."
         
         self.current_turn_idx += 1
         self.prepare_powerup_turn()
@@ -255,18 +270,26 @@ class Game:
 
     def execute_ai_shop(self):
         p = self.turn_order[self.current_turn_idx]
-        # AI tries to buy one item it has < 2 of
         bought = False
-        items = [("Extra Die", COST_EXTRA_DIE), ("Swap", COST_SWAP), ("Reroll", COST_REROLL)]
-        for name, cost in items:
+        
+        # Priority based on personality
+        if p.personality == "Aggressive":
+            targets = [("Extra Die", COST_EXTRA_DIE), ("Reroll", COST_REROLL), ("Swap", COST_SWAP)]
+        elif p.personality == "Balanced":
+            targets = [("Swap", COST_SWAP), ("Extra Die", COST_EXTRA_DIE), ("Reroll", COST_REROLL)]
+        else: # Defensive
+            targets = [("Reroll", COST_REROLL), ("Swap", COST_SWAP), ("Extra Die", COST_EXTRA_DIE)]
+
+        for name, cost in targets:
+            # Buy if has < 2 and can afford
             if p.inventory.get(name, 0) < 2:
                 if p.buy_item(name, cost):
-                    self.message = f"{p.name} bought {name}."
+                    self.message = f"{p.name} ({p.personality}) bought {name}."
                     bought = True
                     break
         
         if not bought:
-            self.message = f"{p.name} skipped the shop."
+            self.message = f"{p.name} ({p.personality}) skipped the shop."
         
         self.current_turn_idx += 1
         self.prepare_shop_turn()
