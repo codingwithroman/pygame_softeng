@@ -122,8 +122,7 @@ class Game:
     def prepare_powerup_turn(self):
         if self.current_turn_idx >= len(self.turn_order):
             self.state = STATE_SHOWDOWN
-            self.message = "All turns finished. Showdown!"
-            self.state_timer = 90
+            self.resolve_showdown()
             return
 
         p = self.turn_order[self.current_turn_idx]
@@ -198,6 +197,50 @@ class Game:
         
         return True
 
+    def resolve_showdown(self):
+        active_players = self.get_active_players()
+        scores = {p: sum(p.dice) for p in active_players}
+        max_score = max(scores.values())
+        winners = [p for p, s in scores.items() if s == max_score]
+
+        if len(winners) == 1:
+            winner = winners[0]
+            winner.add_points(self.pot)
+            self.message = f"Winner: {winner.name} (+{self.pot} pts)!"
+            self.pot = 0
+        else:
+            self.message = f"Tie! {', '.join([w.name for w in winners])}. Pot Rolls Over!"
+        
+        self.state_timer = 180 # Show results longer
+
+    def end_round(self):
+        # Check for busts
+        for p in self.players:
+            if p.points <= 0:
+                p.is_bust = True
+                p.points = 0
+        
+        active_players = self.get_active_players()
+        if len(active_players) <= 1 or self.round >= MAX_ROUNDS:
+            self.state = STATE_GAMEOVER
+            if len(active_players) == 1:
+                self.message = f"Game Over! {active_players[0].name} Wins!"
+            else:
+                top_player = max(self.players, key=lambda x: x.points)
+                self.message = f"Game Over! {top_player.name} is the Winner!"
+        else:
+            self.state = STATE_SHOP
+            self.message = "Round finished! Visiting the Shop..."
+            self.state_timer = 90
+
+    def start_next_round(self):
+        self.round += 1
+        for p in self.players:
+            p.dice = []
+            p.is_starter = False
+            p.has_used_powerup = False
+        self.start_initiative()
+
     def update(self):
         if self.state_timer > 0:
             self.state_timer -= 1
@@ -218,8 +261,10 @@ class Game:
                     if p.is_ai:
                         self.execute_ai_powerup()
                 elif self.state == STATE_SHOWDOWN:
-                    # Next step
-                    pass
+                    self.end_round()
+                elif self.state == STATE_SHOP:
+                    # In Step 7 we implement Shop, for now skip to next round
+                    self.start_next_round()
 
     def handle_click(self, pos):
         if self.state == STATE_BETTING and not self.starter.is_ai:
