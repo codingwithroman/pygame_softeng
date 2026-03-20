@@ -16,6 +16,18 @@ class Player:
         self.is_bust = False
         self.is_starter = False
         self.has_used_powerup = False
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "is_ai": self.is_ai,
+            "personality": self.personality,
+            "points": self.points,
+            "inventory": self.inventory,
+            "dice": self.dice,
+            "is_bust": self.is_bust,
+            "is_starter": self.is_starter,
+            "has_used_powerup": self.has_used_powerup
+        }
 
     def add_points(self, amount):
         if amount % CURRENCY_STEP != 0:
