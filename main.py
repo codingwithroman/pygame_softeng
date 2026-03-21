@@ -45,16 +45,20 @@ class Game:
         try:
             # 1. Laad het muziekbestand
             pygame.mixer.music.load("assets/TheEntertainer.mp3")
-            
+            self.diceroll_sfx = pygame.mixer.Sound("assets/rolldice_crop.mp3")
+
             # 2. Stel het volume in (0.0 tot 1.0)
             # 0.3 is vaak genoeg voor achtergrondmuziek zonder dat het irritant wordt
             pygame.mixer.music.set_volume(0.3)
-            
+            self.diceroll_sfx.set_volume(0.5) # Iets luider voor de dobbelsteenrolgeluiden
+
             # 3. Start het afspelen
             # De parameter -1 zorgt ervoor dat het nummer oneindig herhaalt (loopt)
             pygame.mixer.music.play(-1) 
+
         except Exception as e:
-            print(f"Muziekfout: Kon het bestand niet laden. {e}")
+            print(f"Muziekfout: {e}")
+            self.diceroll_sfx = None
 
     def reset_game(self):
         self.players = [
@@ -747,9 +751,14 @@ class Game:
             prev_dice = self.previous_dice_snapshots.get(player_name, [])
             curr_timer = self.dice_animation_timers.get(player_name, 0)
 
+            
+
             if current_logical_dice and current_logical_dice != prev_dice and curr_timer == 0:
                 self.dice_animation_timers[player_name] = self.DICE_ANIMATION_LENGTH
                 curr_timer = self.DICE_ANIMATION_LENGTH
+
+                if self.diceroll_sfx:
+                    self.diceroll_sfx.play()
 
             self.previous_dice_snapshots[player_name] = list(current_logical_dice)
 
