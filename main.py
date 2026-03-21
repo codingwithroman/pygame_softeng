@@ -39,6 +39,20 @@ class Game:
         
         self.reset_game()
 
+        try:
+            # 1. Laad het muziekbestand
+            pygame.mixer.music.load("assets/TheEntertainer.mp3")
+            
+            # 2. Stel het volume in (0.0 tot 1.0)
+            # 0.3 is vaak genoeg voor achtergrondmuziek zonder dat het irritant wordt
+            pygame.mixer.music.set_volume(0.3)
+            
+            # 3. Start het afspelen
+            # De parameter -1 zorgt ervoor dat het nummer oneindig herhaalt (loopt)
+            pygame.mixer.music.play(-1) 
+        except Exception as e:
+            print(f"Muziekfout: Kon het bestand niet laden. {e}")
+
     def reset_game(self):
         self.players = [
             Player("P1 (You)", is_ai=False),
@@ -422,6 +436,9 @@ class Game:
                             p = self.turn_order[self.current_turn_idx]
                         if p and p.is_ai:
                             self.execute_ai_shop_turn()
+        if self.state == STATE_GAMEOVER:
+            # Fade de muziek uit in 2 seconden (2000 ms) voor een dramatisch effect
+            pygame.mixer.music.fadeout(2000)
 
     def handle_click(self, pos):
         if self.state == STATE_GAMEOVER:
@@ -504,6 +521,29 @@ class Game:
                                     self.current_turn_idx += 1
                                     self.prepare_shop_turn()
 
+    def draw_aa_rounded_rect(self, surface, rect, color, radius, thickness=1):
+        x, y, w, h = rect
+        
+        # Teken de 4 hoeken (anti-aliased)
+        # We tekenen meerdere cirkels voor de dikte, net als bij de pot
+        for i in range(thickness):
+            r = radius - i
+            pygame.gfxdraw.aacircle(surface, x + radius, y + radius, r, color)     # Top-left
+            pygame.gfxdraw.aacircle(surface, x + w - radius, y + radius, r, color) # Top-right
+            pygame.gfxdraw.aacircle(surface, x + radius, y + h - radius, r, color) # Bottom-left
+            pygame.gfxdraw.aacircle(surface, x + w - radius, y + h - radius, r, color) # Bottom-right
+
+        # Teken de 4 zijden (anti-aliased lijnen)
+        # Boven
+        pygame.draw.line(surface, color, (x + radius, y), (x + w - radius, y), thickness)
+        # Onder
+        pygame.draw.line(surface, color, (x + radius, y + h - 1), (x + w - radius, y + h - 1), thickness)
+        # Links
+        pygame.draw.line(surface, color, (x, y + radius), (x, y + h - radius), thickness)
+        # Rechts
+        pygame.draw.line(surface, color, (x + w - 1, y + radius), (x + w - 1, y + h - radius), thickness)
+
+
     def draw_button(self, x, y, w, h, text, color, btn_id):
         rect = pygame.Rect(x, y, w, h)
         mouse_pos = pygame.mouse.get_pos()
@@ -520,7 +560,14 @@ class Game:
 
         # Teken de knop
         pygame.draw.rect(self.screen, draw_color, rect, border_radius=15)
-        pygame.draw.rect(self.screen, COLOR_BLACK, rect, width=2, border_radius=15)
+
+        # Teken de buitenlijn van 1 pixel
+        pygame.draw.rect(self.screen, COLOR_BLACK, rect, width=1, border_radius=15)
+        # Teken een tweede, iets transparantere binnenlijn voor optische zachtheid
+        inner_rect = rect.inflate(-1, -1)
+        pygame.draw.rect(self.screen, (0, 0, 0, 60), inner_rect, width=1, border_radius=14)
+
+
         
         txt = self.btn_font.render(text, True, COLOR_WHITE)
         self.screen.blit(txt, (x + w//2 - txt.get_width()//2, y + h//2 - txt.get_height()//2))
