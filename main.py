@@ -1,8 +1,9 @@
 import pygame
+import pygame.gfxdraw
 import sys
 import random
 from constants import (
-    SCREEN_WIDTH, SCREEN_HEIGHT, FPS, COLOR_TABLE_GREEN, COLOR_WHITE, COLOR_BLACK,
+    SCREEN_WIDTH, SCREEN_HEIGHT, HEADER_HEIGHT, FOOTER_HEIGHT, GAME_HEIGHT, FPS, COLOR_TABLE_GREEN, COLOR_WHITE, COLOR_BLACK,
     COLOR_GREY, COLOR_BROWN, COLOR_RED, COLOR_GOLD, STATE_INITIATIVE, STATE_BETTING,
     STATE_ROLL_ALL, STATE_POWERUP_TURN, STATE_SHOWDOWN, STATE_SHOP, STATE_GAMEOVER,
     COST_REROLL, COST_SWAP, COST_EXTRA_DIE, MAX_ROUNDS, CURRENCY_STEP, MAX_BET, DICE_SIZE
@@ -13,10 +14,13 @@ from player import Player
 class Game:
     def __init__(self, screen):
         self.screen = screen
+        self.background_image = pygame.transform.scale(pygame.image.load("assets/Pokertable_edit.png").convert(), (SCREEN_WIDTH, GAME_HEIGHT))
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 20)
         self.large_font = pygame.font.SysFont("Arial", 40, bold=True)
-        self.btn_font = pygame.font.SysFont("Arial", 24, bold=True)
+        self.btn_font = pygame.font.SysFont("Arial", 18, bold=True)
+        self.font_title = pygame.font.Font("assets/RetroCasino.ttf", 72)
+        self.bet_font = pygame.font.SysFont("Arial", 32, bold=True) # Een stuk groter dan de 18 van de buttons
         
         # Initialize attributes to satisfy linter
         self.players = []
@@ -502,60 +506,120 @@ class Game:
 
     def draw_button(self, x, y, w, h, text, color, btn_id):
         rect = pygame.Rect(x, y, w, h)
-        pygame.draw.rect(self.screen, color, rect, border_radius=5)
-        pygame.draw.rect(self.screen, COLOR_BLACK, rect, width=2, border_radius=5)
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Check of de muis boven de knop zweeft
+        if rect.collidepoint(mouse_pos):
+            # Zet cursor op handje als we over een knop zweven
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+            
+            # Kleur lichter maken voor de hover
+            draw_color = tuple(min(255, int(c * 1.2)) for c in color)
+        else:
+            draw_color = color
+
+        # Teken de knop
+        pygame.draw.rect(self.screen, draw_color, rect, border_radius=15)
+        pygame.draw.rect(self.screen, COLOR_BLACK, rect, width=2, border_radius=15)
+        
         txt = self.btn_font.render(text, True, COLOR_WHITE)
         self.screen.blit(txt, (x + w//2 - txt.get_width()//2, y + h//2 - txt.get_height()//2))
+        
         self.buttons.append({'rect': rect, 'id': btn_id})
 
     def draw(self):
+        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
         self.buttons = []
 
+
         # ===== BACKGROUND (CASINO TABLE) =====
-        self.screen.fill((15, 60, 20))
+        self.screen.blit(self.background_image, (0, HEADER_HEIGHT))
 
-        pygame.draw.ellipse(self.screen, (0, 110, 0),
-                            (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80))
-        pygame.draw.ellipse(self.screen, (212, 175, 55),
-                            (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80), 6)
+        # pygame.draw.ellipse(self.screen, (0, 110, 0),
+        #                     (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80))
+        # pygame.draw.ellipse(self.screen, (212, 175, 55),
+        #                     (80, 40, SCREEN_WIDTH - 160, SCREEN_HEIGHT - 80), 6)
 
-        pygame.draw.circle(self.screen, (0, 90, 0),
-                        (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 180)
+        # pygame.draw.circle(self.screen, (0, 90, 0),
+        #                 (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), 180)
 
         # ===== TITLE =====
-        title = self.large_font.render("HIGH ROLLER", True, COLOR_GOLD)
-        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 10))
+        title = self.font_title.render("HIGH ROLLER", True, COLOR_GOLD)
+        self.screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 10 + HEADER_HEIGHT))
 
-        status = self.font.render(f"Round {self.round} | {self.state}", True, COLOR_WHITE)
-        self.screen.blit(status, (SCREEN_WIDTH // 2 - status.get_width() // 2, 60))
+
+        # ===== HEADER =====
+
+        # Maak een semi-transparante balk bovenin
+        pygame.draw.rect(self.screen, COLOR_BLACK, (0, 0, SCREEN_WIDTH, HEADER_HEIGHT))
+
+        # Verplaats Round & State naar de hoeken
+        round_txt = self.font.render(f"ROUND: {self.round}", True, COLOR_WHITE)
+        state_txt = self.font.render(f"PHASE: {self.state}", True, COLOR_GOLD)
+
+        self.screen.blit(round_txt, (20, 10)) # Top-links
+        self.screen.blit(state_txt, (SCREEN_WIDTH - state_txt.get_width() - 20, 10)) # Top-rechts
+
+
+        # ==== FOOTER ==== 
+        footer_y = SCREEN_HEIGHT - FOOTER_HEIGHT # Dit is 840
+        pygame.draw.rect(self.screen, COLOR_BLACK, (0, footer_y, SCREEN_WIDTH, FOOTER_HEIGHT))
+
+        if self.message:
+            msg_txt = self.font.render(self.message, True, COLOR_WHITE)
+            msg_x = SCREEN_WIDTH // 2 - msg_txt.get_width() // 2
+            # We zetten de tekst in de onderste balk
+            self.screen.blit(msg_txt, (msg_x, footer_y + 10))
 
         # ===== POT (CENTER) =====
-        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        cx = SCREEN_WIDTH // 2
+        cy = HEADER_HEIGHT + GAME_HEIGHT // 2 
 
-        pygame.draw.circle(self.screen, (30, 30, 30), (cx, cy), 75)
-        pygame.draw.circle(self.screen, COLOR_GOLD, (cx, cy), 75, 4)
+        # pygame.draw.circle(self.screen, (30, 30, 30), (cx, cy), 75)
+        # pygame.draw.circle(self.screen, COLOR_GOLD, (cx, cy), 75, 4)
+
+        # Teken de gevulde cirkel (anti-aliased)
+        pygame.gfxdraw.aacircle(self.screen, cx, cy, 75, (30, 30, 30))
+        pygame.gfxdraw.filled_circle(self.screen, cx, cy, 75, (30, 30, 30))
+
+        # Teken de gouden rand (anti-aliased)
+        border_thickness = 6 # Pas dit aan voor meer of minder dikte
+        for i in range(border_thickness):
+            # We tekenen cirkels van straal 75 naar binnen toe (75, 74, 73, etc.)
+            pygame.gfxdraw.aacircle(self.screen, cx, cy, 75 - i, COLOR_GOLD)
+        # pygame.gfxdraw.aacircle(self.screen, cx, cy, 75, COLOR_GOLD)
+        pygame.gfxdraw.aacircle(self.screen, cx, cy, 74, COLOR_GOLD)
 
         pot_text = self.large_font.render(f"${self.pot}", True, COLOR_GOLD)
-        self.screen.blit(pot_text, (cx - pot_text.get_width() // 2, cy - 25))
+        self.screen.blit(pot_text, (cx - pot_text.get_width() // 2, cy - 19))
 
-        # ===== MESSAGE =====
-        msg = self.font.render(self.message, True, COLOR_WHITE)
-        self.screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 100))
 
         # ===== SHOP MODE BACKGROUND =====
         if self.state == STATE_SHOP:
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay = pygame.Surface((SCREEN_WIDTH, GAME_HEIGHT))
             overlay.set_alpha(180)
             overlay.fill((20, 20, 35))
-            self.screen.blit(overlay, (0, 0))
+            self.screen.blit(overlay, (0, HEADER_HEIGHT))
 
         # ===== PLAYER PANELS =====
+        # Centraal punt voor horizontale uitlijning
+        center_x = SCREEN_WIDTH // 2
+        # Het verticale midden van de tafel-foto (voor P2 en P4)
+        table_center_y = HEADER_HEIGHT + (GAME_HEIGHT // 2)
+
         positions = [
-            (SCREEN_WIDTH // 2 - 130, SCREEN_HEIGHT - 190),  # P1 (bottom)
-            (50, SCREEN_HEIGHT // 2 - 90),                   # P2 (left)
-            (SCREEN_WIDTH // 2 - 130, 130),                  # P3 (TOP — FIXED)
-            (SCREEN_WIDTH - 300, SCREEN_HEIGHT // 2 - 90)    # P4 (right)
-        ]
+            # P1 (Onderaan):
+            (center_x - 130, SCREEN_HEIGHT - FOOTER_HEIGHT - 210), 
+            
+            # P2 (Links): Verticaal gecentreerd op het laken
+            (50, table_center_y - 85), 
+            
+            # P3 (Bovenaan): Verlaagd om de titel vrij te houden (y=130)
+            (center_x - 130, HEADER_HEIGHT + 110), 
+            
+            # P4 (Rechts): Verticaal gecentreerd op het laken
+            (SCREEN_WIDTH - 310, table_center_y - 85) 
+]
 
         for i, p in enumerate(self.players):
             if not p:
@@ -586,12 +650,34 @@ class Game:
 
             pygame.draw.rect(self.screen, COLOR_BLACK, (x, y, w, h), 2, border_radius=14)
 
-            # Player name + points
-            name = self.font.render(p.name, True, COLOR_WHITE)
-            pts = self.font.render(f"${p.points}", True, COLOR_GOLD)
 
-            self.screen.blit(name, (x + 10, y + 10))
-            self.screen.blit(pts, (x + 10, y + 40))
+            # ===== PLAYER PANEL HEADER =====
+            # 1. Bereken het totaal aantal ogen
+            total_eyes = sum(p.dice) if p.dice else 0
+
+            # 2. Render de tekst voor de drie kolommen
+            name_txt = self.font.render(p.name, True, COLOR_WHITE)
+            pts_txt = self.font.render(f"${p.points}", True, COLOR_GOLD)
+            total_txt = self.font.render(f"Eyes: {total_eyes}", True, (180, 180, 180)) # Subtiel grijs
+
+            # 3. Posities berekenen voor de header-rij (y + 8 voor wat padding)
+            header_y = y + 8
+            self.screen.blit(name_txt, (x + 12, header_y)) # Links: Naam
+            self.screen.blit(total_txt, (x + (w // 2) - (total_txt.get_width() // 2), header_y)) # Midden: Totaal
+            self.screen.blit(pts_txt, (x + w - pts_txt.get_width() - 12, header_y)) # Rechts: Saldo
+
+            # 4. Trek een subtiele scheidingslijn (separator)
+            # We tekenen een donkergrijze lijn net onder de tekst (op y + 35)
+            pygame.draw.line(self.screen, (60, 60, 60), (x, y + 35), (x + w, y + 35), 1)
+
+
+
+            # # Player name + points
+            # name = self.font.render(p.name, True, COLOR_WHITE)
+            # pts = self.font.render(f"${p.points}", True, COLOR_GOLD)
+
+            # self.screen.blit(name, (x + 10, y + 10))
+            # self.screen.blit(pts, (x + 10, y + 40))
 
             # Dice (centered)
             if p.dice:
@@ -599,65 +685,118 @@ class Game:
                 start_x = x + (w - total_w) // 2
 
                 for j, val in enumerate(p.dice):
-                    draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 70, val)
+                    draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 55, val)
 
-            # Inventory
+            # ===== INVENTORY (BADGES) =====
             if p.inventory:
-                inv = ", ".join([f"{k[0]}:{v}" for k, v in p.inventory.items()])
-                inv_text = self.font.render(inv, True, COLOR_WHITE)
-                self.screen.blit(inv_text, (x + 10, y + 140))
+                # Muted palette voor een rustiger totaalbeeld
+                badge_colors = {
+                    "Reroll": (120, 90, 70),    # Gedempt terracotta
+                    "Swap": (80, 95, 120),      # Gedempt staalblauw
+                    "Extra Die": (85, 110, 85)   # Gedempt saliegroen
+                }
+                
+                badge_h = 26
+                badge_y = y + 138
+                gap = 10
+                
+                # STAP 1: Bereken de totale breedte van de hele rij badges
+                active_badges = []
+                total_row_width = 0
+                
+                for item_name, count in p.inventory.items():
+                    if count <= 0: continue
+                    label = f"{item_name[0]} x{count}"
+                    txt_surf = self.font.render(label, True, (220, 220, 220))
+                    b_w = txt_surf.get_width() + 16 # Breedte inclusief padding
+                    active_badges.append((txt_surf, b_w, item_name))
+                    total_row_width += b_w
+                
+                # Voeg de tussenruimtes (gaps) toe aan de totale breedte
+                if active_badges:
+                    total_row_width += gap * (len(active_badges) - 1)
+                    
+                    # STAP 2: Bereken het gecentreerde startpunt
+                    # (Panel breedte - Totale rij breedte) / 2
+                    current_badge_x = x + (260 - total_row_width) // 2 
+
+                    # STAP 3: Teken de badges
+                    for txt_surf, b_w, item_name in active_badges:
+                        color = badge_colors.get(item_name, COLOR_GREY)
+                        
+                        # Achtergrond badge
+                        pygame.draw.rect(self.screen, color, (current_badge_x, badge_y, b_w, badge_h), border_radius=6)
+                        # Subtiele inner-stroke voor diepte
+                        pygame.draw.rect(self.screen, (255, 255, 255, 30), (current_badge_x, badge_y, b_w, badge_h), 1, border_radius=6)
+                        
+                        # Tekst blitten (optisch verticaal gecentreerd met +1 pixel)
+                        text_cent_y = badge_y + (badge_h // 2 - txt_surf.get_height() // 2) + 1
+                        self.screen.blit(txt_surf, (current_badge_x + 8, text_cent_y))
+                        
+                        # Schuif op naar de volgende positie
+                        current_badge_x += b_w + gap
+
 
         # ===== BUTTONS =====
 
+        # Referentiepunt P1 (de speler onderaan)
+        p1_y = SCREEN_HEIGHT - FOOTER_HEIGHT - 210     # De bovenkant van het P1 paneel
+        p1_center_x = SCREEN_WIDTH // 2
+
+        # We zetten button_y nu op -110 (was -80) om ze hoger te plaatsen
+        button_y = p1_y - 110         
+
         # Betting
         if self.state == STATE_BETTING and self.starter and not self.starter.is_ai:
-            self.draw_button(cx - 100, 180, 50, 40, "-", COLOR_BROWN, "bet_minus")
-            self.draw_button(cx + 50, 140, 50, 40, "+", COLOR_BROWN, "bet_plus")
+            # De min en plus knoppen op de bovenste rij
+            self.draw_button(p1_center_x - 120, button_y, 50, 40, "-", COLOR_BROWN, "bet_minus")
+            self.draw_button(p1_center_x + 70, button_y, 50, 40, "+", COLOR_BROWN, "bet_plus")
 
-            bet_text = self.btn_font.render(f"${self.current_bet}", True, COLOR_GOLD)
-            self.screen.blit(bet_text, (cx - bet_text.get_width() // 2, 145))
+            # Het bedrag met het nieuwe grotere font, precies in het midden
+            bet_text = self.bet_font.render(f"${self.current_bet}", True, COLOR_GOLD)
+            # We centreren het verticaal t.o.v. de - en + knoppen
+            text_y = button_y + (40 // 2) - (bet_text.get_height() // 2)
+            self.screen.blit(bet_text, (p1_center_x - bet_text.get_width() // 2, text_y))
 
-            self.draw_button(cx - 60, 240, 120, 45, "CONFIRM", (0, 120, 0), "bet_confirm")
+            # De CONFIRM knop op de tweede rij (50 pixels lager)
+            self.draw_button(p1_center_x - 65, button_y + 55, 130, 45, "CONFIRM", (0, 120, 0), "bet_confirm")
 
         # Powerups
         if self.state == STATE_POWERUP_TURN and self.turn_order:
-            p = None
-            if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
-                p = self.turn_order[self.current_turn_idx]
+            p = self.turn_order[self.current_turn_idx] if self.current_turn_idx < len(self.turn_order) else None
             if p and not p.is_ai:
-                self.draw_button(cx - 260, 140, 100, 40, "PASS", COLOR_GREY, "pw_pass")
+                btn_w = 110
+                gap = 20
+                start_x = p1_center_x - 250 
 
-                if p.has_powerup("Reroll"):
-                    self.draw_button(cx - 140, 140, 100, 40, "REROLL", COLOR_BROWN, "pw_reroll")
-
-                if p.has_powerup("Swap"):
-                    self.draw_button(cx - 20, 140, 100, 40, "SWAP", COLOR_BROWN, "pw_swap")
-
-                if p.has_powerup("Extra Die"):
-                    self.draw_button(cx + 100, 140, 120, 40, "EXTRA", COLOR_BROWN, "pw_extra")
+                self.draw_button(start_x, button_y + 20, btn_w, 45, "PASS", COLOR_GOLD, "pw_pass")
+                self.draw_button(start_x + (btn_w + gap), button_y + 20, btn_w, 45, "REROLL", COLOR_BROWN, "pw_reroll")
+                self.draw_button(start_x + 2 * (btn_w + gap), button_y + 20, btn_w, 45, "SWAP", COLOR_BROWN, "pw_swap")
+                self.draw_button(start_x + 3 * (btn_w + gap), button_y + 20, btn_w, 45, "EXTRA", COLOR_BROWN, "pw_extra")
 
         # Shop
         if self.state == STATE_SHOP and self.turn_order:
-            p = None
-            if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
-                p = self.turn_order[self.current_turn_idx]
+            p = self.turn_order[self.current_turn_idx] if self.current_turn_idx < len(self.turn_order) else None
+            # In main.py -> draw() onder de STATE_SHOP sectie
             if p and not p.is_ai:
-                self.draw_button(cx - 220, 140, 130, 45,
-                                f"REROLL ({COST_REROLL})",
-                                COLOR_BROWN if p.points >= COST_REROLL + 50 else COLOR_GREY,
-                                "shop_reroll")
+                shop_y = button_y - 40 
+                btn_w = 160
+                gap = 25
+                start_x = p1_center_x - 265 # Perfect gecentreerd
 
-                self.draw_button(cx - 60, 140, 130, 45,
-                                f"SWAP ({COST_SWAP})",
-                                COLOR_BROWN if p.points >= COST_SWAP + 50 else COLOR_GREY,
-                                "shop_swap")
+                # --- COLOR LOGIC PER ITEM ---
+                # We checken of de speler de kosten + de 50 reserve kan betalen
+                color_reroll = COLOR_BROWN if p.points >= COST_REROLL + 50 else COLOR_GREY
+                color_swap   = COLOR_BROWN if p.points >= COST_SWAP + 50 else COLOR_GREY
+                color_extra  = COLOR_BROWN if p.points >= COST_EXTRA_DIE + 50 else COLOR_GREY
 
-                self.draw_button(cx + 100, 140, 150, 45,
-                                f"EXTRA ({COST_EXTRA_DIE})",
-                                COLOR_BROWN if p.points >= COST_EXTRA_DIE + 50 else COLOR_GREY,
-                                "shop_extra")
-
-                self.draw_button(cx - 60, 200, 120, 45, "EXIT", (0, 120, 0), "shop_exit")
+                # --- DRAW THE BUTTONS ---
+                self.draw_button(start_x, shop_y, btn_w, 45, f"REROLL ({COST_REROLL})", color_reroll, "shop_reroll")
+                self.draw_button(start_x + (btn_w + gap), shop_y, btn_w, 45, f"SWAP ({COST_SWAP})", color_swap, "shop_swap")
+                self.draw_button(start_x + 2 * (btn_w + gap), shop_y, btn_w, 45, f"EXTRA ({COST_EXTRA_DIE})", color_extra, "shop_extra")
+                
+                # EXIT knop blijft altijd groen en klikbaar
+                self.draw_button(p1_center_x - 60, shop_y + 50, 120, 40, "EXIT", (0, 120, 0), "shop_exit")
 
     def draw_gameover(self):
         self.screen.fill(COLOR_TABLE_GREEN)
