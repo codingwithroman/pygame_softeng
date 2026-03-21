@@ -21,7 +21,10 @@ class Game:
         self.btn_font = pygame.font.SysFont("Arial", 18, bold=True)
         self.font_title = pygame.font.Font("assets/RetroCasino.ttf", 72)
         self.bet_font = pygame.font.SysFont("Arial", 32, bold=True) # Een stuk groter dan de 18 van de buttons
-        
+        self.previous_dice_snapshots = {}
+        self.dice_animation_timers = {}
+        self.DICE_ANIMATION_LENGTH = 30
+
         # Initialize attributes to satisfy linter
         self.players = []
         self.round = 1
@@ -727,12 +730,66 @@ class Game:
             # self.screen.blit(pts, (x + 10, y + 40))
 
             # Dice (centered)
-            if p.dice:
-                total_w = len(p.dice) * (DICE_SIZE + 10) - 10
-                start_x = x + (w - total_w) // 2
+            # if p.dice:
+            #     total_w = len(p.dice) * (DICE_SIZE + 10) - 10
+            #     start_x = x + (w - total_w) // 2
 
-                for j, val in enumerate(p.dice):
-                    draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 55, val)
+            #     for j, val in enumerate(p.dice):
+            #         draw_die(self.screen, start_x + j * (DICE_SIZE + 10), y + 55, val)
+
+
+            # ===== DICE (CENTER) =====
+            current_logical_dice = p.dice if p.dice else [] # Fix: 'player' -> 'p'
+            dice_to_render = current_logical_dice
+
+            # --- ANIMATIE LOGICA START ---
+            player_name = p.name # Fix: 'player' -> 'p'
+            prev_dice = self.previous_dice_snapshots.get(player_name, [])
+            curr_timer = self.dice_animation_timers.get(player_name, 0)
+
+            if current_logical_dice and current_logical_dice != prev_dice and curr_timer == 0:
+                self.dice_animation_timers[player_name] = self.DICE_ANIMATION_LENGTH
+                curr_timer = self.DICE_ANIMATION_LENGTH
+
+            self.previous_dice_snapshots[player_name] = list(current_logical_dice)
+
+            if curr_timer > 0:
+                num_dice_to_animate = len(current_logical_dice) if len(current_logical_dice) > 0 else 2
+                dice_to_render = [random.randint(1, 6) for _ in range(num_dice_to_animate)]
+                self.dice_animation_timers[player_name] -= 1
+                progress = (self.DICE_ANIMATION_LENGTH - curr_timer) / self.DICE_ANIMATION_LENGTH
+                angle = progress * 720 
+            else:
+                angle = 0
+
+            # --- ANIMATIE LOGICA EIND ---
+
+            # Bereken de startpositie zodat de dobbelstenen gecentreerd staan in het panel
+            total_dice_width = len(dice_to_render) * (DICE_SIZE + 10) - 10
+            start_dice_x = x + (w - total_dice_width) // 2
+
+            for j, val in enumerate(dice_to_render):
+                # Fix: 'dx' -> 'x' en 'dy' -> 'y'
+                # We zetten ze op y + 65 om ze onder de nieuwe header te plaatsen
+                px = start_dice_x + j * (DICE_SIZE + 10)
+                py = y + 55
+
+                if curr_timer > 0:
+                    temp_size = int(DICE_SIZE * 1.5)
+                    die_surf = pygame.Surface((temp_size, temp_size), pygame.SRCALPHA)
+                    
+                    # Belangrijk: we roepen draw_die direct aan (niet via self.dice_renderer)
+                    # We geven 'self' mee omdat de functie dat verwacht in dice_renderer.py
+                    offset = (temp_size - DICE_SIZE) // 2
+                    draw_die(self, offset, offset, DICE_SIZE, val, target_surf=die_surf)
+                    
+                    rotated_die = pygame.transform.rotate(die_surf, angle)
+                    new_rect = rotated_die.get_rect(center=(px + DICE_SIZE // 2, py + DICE_SIZE // 2))
+                    self.screen.blit(rotated_die, new_rect)
+                else:
+                    # Statische render
+                    draw_die(self, px, py, DICE_SIZE, val)
+
 
             # ===== INVENTORY (BADGES) =====
             if p.inventory:
