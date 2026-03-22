@@ -28,7 +28,6 @@ class Player:
         self.points -= amount
         if self.points <= 0:
             self.points = 0
-            self.is_bust = True
 
     def has_powerup(self, powerup_type):
         return self.inventory.get(powerup_type, 0) > 0

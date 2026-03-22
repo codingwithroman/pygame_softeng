@@ -209,8 +209,7 @@ class Game:
             p = self.turn_order[self.current_turn_idx]
 
         if p and p.is_ai:
-            self.message = f"{p.name}'s turn (AI)..."
-            self.state_timer = 150 # Delay to see AI turn
+            self.execute_ai_powerup()
         else:
             self.message = f"Your turn! Use a power-up or Pass."
 
@@ -281,7 +280,6 @@ class Game:
         
         self.current_turn_idx += 1
         self.state_timer = 180
-        self.prepare_powerup_turn()
 
     def use_powerup(self, player, p_type):
         if player.has_used_powerup: return False
@@ -362,9 +360,9 @@ class Game:
         p = None
         if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
             p = self.turn_order[self.current_turn_idx]
+
         if p and p.is_ai:
-            self.message = f"{p.name} is shopping (AI)..."
-            self.state_timer = 180 # Delay for AI shop
+            self.execute_ai_shop_turn()
         else:
             self.message = f"Your turn! Buy items (Min 50 pts reserve)."
 
@@ -398,7 +396,7 @@ class Game:
             self.message = f"{p.name} ({p.personality}) skipped the shop."
         
         self.current_turn_idx += 1
-        self.prepare_shop_turn()
+        self.state_timer = 150
 
     def start_next_round(self):
         self.round += 1
@@ -428,21 +426,11 @@ class Game:
                 elif self.state == STATE_ROLL_ALL:
                     self.roll_all()
                 elif self.state == STATE_POWERUP_TURN:
-                    if self.turn_order and self.current_turn_idx < len(self.turn_order):
-                        p = None
-                        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
-                            p = self.turn_order[self.current_turn_idx]
-                        if p and p.is_ai:
-                            self.execute_ai_powerup()
+                    self.prepare_powerup_turn()
                 elif self.state == STATE_SHOWDOWN:
                     self.end_round()
                 elif self.state == STATE_SHOP:
-                    if self.turn_order and self.current_turn_idx < len(self.turn_order):
-                        p = None
-                        if self.turn_order and 0 <= self.current_turn_idx < len(self.turn_order):
-                            p = self.turn_order[self.current_turn_idx]
-                        if p and p.is_ai:
-                            self.execute_ai_shop_turn()
+                    self.prepare_shop_turn()
         if self.state == STATE_GAMEOVER:
             # Fade de muziek uit in 2 seconden (2000 ms) voor een dramatisch effect
             pygame.mixer.music.fadeout(2000)
@@ -478,8 +466,9 @@ class Game:
                         if btn['rect'].collidepoint(pos):
 
                             if btn['id'] == "pw_pass":
+                                self.message = "You passed."
                                 self.current_turn_idx += 1
-                                self.prepare_powerup_turn()
+                                self.state_timer = 90
 
                             elif btn['id'] == "pw_reroll":
                                 if self.use_powerup(p, "Reroll"):
@@ -507,26 +496,27 @@ class Game:
                         if btn['rect'].collidepoint(pos):
 
                             if btn['id'] == "shop_exit":
+                                self.message = "Skipped shop."
                                 self.current_turn_idx += 1
-                                self.prepare_shop_turn()
+                                self.state_timer = 90
 
                             elif btn['id'] == "shop_reroll":
                                 if p.buy_item("Reroll", COST_REROLL):
                                     self.message = "Bought Reroll!"
                                     self.current_turn_idx += 1
-                                    self.prepare_shop_turn()
+                                    self.state_timer = 120
 
                             elif btn['id'] == "shop_swap":
                                 if p.buy_item("Swap", COST_SWAP):
                                     self.message = "Bought Swap!"
                                     self.current_turn_idx += 1
-                                    self.prepare_shop_turn()
+                                    self.state_timer = 120
 
                             elif btn['id'] == "shop_extra":
                                 if p.buy_item("Extra Die", COST_EXTRA_DIE):
                                     self.message = "Bought Extra Die!"
                                     self.current_turn_idx += 1
-                                    self.prepare_shop_turn()
+                                    self.state_timer = 120
 
     def draw_aa_rounded_rect(self, surface, rect, color, radius, thickness=1):
         x, y, w, h = rect
